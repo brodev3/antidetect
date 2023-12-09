@@ -1,28 +1,42 @@
+# Anti-detect browser
 <p>
-      <img src="Project Logo Url" width="726">
+      <img src="https://i.ibb.co/3sHQCSp/av.jpg" >
 </p>
 
-<p align="center">
-   <img src="" alt="Unity Version">
-   <img src="" alt="Game Version">
-   <img src="" alt="License">
+<p >
+   <img src="https://img.shields.io/badge/build-v_1.1-brightgreen?label=Version" alt="Version">
 </p>
+
+
+
+
 
 ## About
 
-About Text Here
+A console application with a simple user interface for managing and working with browser profiles with anti-detection protection. 
 
-## Documentation
+It is based on the [browser-with-fingerprints](https://github.com/CheshireCaat/browser-with-fingerprints) plugin, which allows you to change your browser fingerprint, create a virtual identity and increase the secrecy of your browser. 
 
-Documentation Here
+This is done using the [FingerprintSwitcher](https://fingerprints.bablosoft.com/) service, which allows you to replace a list of important browser properties, so you will behave like a completely new user.
 
-## Distribute
+## Usage
+
+### Profile manager
+
+### Fingerprint
+
+### Proxy
+
+### Cloud
+
+## Installation and launch
+
+## Guides
+
+## Future development
 
 - [Service Name](Page Link)
 
-
-## Developers
-
-- [Delevoper Name](GitHub Profile Link)
-
 ## License
+
+Project brodev3/antidetect is distributed under the MIT license.
