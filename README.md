@@ -19,6 +19,8 @@ It is based on the [browser-with-fingerprints](https://github.com/CheshireCaat/b
 
 This is done using the [FingerprintSwitcher](https://fingerprints.bablosoft.com/) service, which allows you to replace a list of important browser properties, so you will behave like a completely new user.
 
+The application will allow you to increase your anonymity on the web. You can use multi-accounts on any platforms as different users. Thanks to the simple console interface, you don't need any skills to use antidetect. This project is for the community and I will gradually develop and improve it in the future. 
+
 ## Usage
 
 ### Profile manager
