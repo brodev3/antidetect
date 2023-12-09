@@ -23,9 +23,58 @@ The application will allow you to increase your anonymity on the web. You can us
 
 ## Usage
 
+> [!NOTE]
+> This section I plan to regularly add and improve the application for users (if there will be any)...
+> 
 ### Profile manager
 
+ Using the user interface you can create an unlimited number of Chromium profiles and interact with them. 
+
+ Profiles are available in the profile list, sorted by the age of the profile, where you can select any profile and interact with it.
+
+The list of profiles is closed, moving the cursor next on the last profile will take you to the first profile and vice versa. 
+
+<p align="center">
+      <img src="https://i.ibb.co/xSPb3fL/image-2023-12-10-02-42-04.png" >
+</p>
+
+**Standard features:** 
+- open, 
+- delete
+- rename, 
+- proxy connection,
+- fingerprint change.
+
+  
+  <p align="center">
+      <img src="https://i.ibb.co/cLmGXTX/image-2023-12-10-03-12-29.png" >
+</p>
+
 ### Fingerprint
+
+When you create a profile you get a new fingerprint and save it to use it in future work. 
+Available options:
+- change fingerprint,
+- delete the fingerprint, will be use the fingerprint of your device.
+  
+The [FingerprintSwitcher](https://fingerprints.bablosoft.com/) service provides free fingerprints that are used in the application. This gives us unique browser properties that we apply to our profiles. 
+
+The main properties are:
+- UserAgent,
+-  navigator,
+- WebGL,
+- WebRTC,
+- screen and viewport
+  (free mode is limited and you can get a print with a large screen size,
+you can apply the size of your monitor to the profile,
+to do this you need to move the profile window to the top border of the screen with the cursor),
+- Timezone,
+- Language,
+ - Devices,
+- fonts,
+- etc...
+  
+The full list can be viewed on the service's website.
 
 ### Proxy
 
@@ -41,4 +90,4 @@ The application will allow you to increase your anonymity on the web. You can us
 
 ## License
 
-Project brodev3/antidetect is distributed under the MIT license.
+Project **brodev3**/antidetect is distributed under the MIT license.
