@@ -78,7 +78,15 @@ The full list can be viewed on the service's website.
 
 ### Proxy
 
+You can use a proxy for each profile.
+The browser supports two types of proxy servers - https and socks5. 
+
+Proxies with authorization (with login and password) are also supported. Changing browser time zone and languages depending on proxy.
 ### Cloud
+
+For teamwork, saving space on your device and accessibility, you can use the cloud to store profile data.
+
+ I use google drive, that way you can work with your profiles from different devices.
 
 ## Installation and launch
 
