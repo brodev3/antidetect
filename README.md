@@ -55,7 +55,7 @@ The list of profiles is closed, moving the cursor next on the last profile will 
 When you create a profile you get a new fingerprint and save it to use it in future work. 
 Available options:
 - change fingerprint,
-- delete the fingerprint, will be use the fingerprint of your device.
+- delete fingerprint, will be use the fingerprint of your device.
   
 The [FingerprintSwitcher](https://fingerprints.bablosoft.com/) service provides free fingerprints that are used in the application. This gives us unique browser properties that we apply to our profiles. 
 
@@ -79,6 +79,10 @@ The full list can be viewed on the service's website.
 ### Proxy
 
 You can use a proxy for each profile.
+Available options:
+- set proxy,
+- delete proxy, will be use real IP.
+  
 The browser supports two types of proxy servers - https and socks5. 
 
 Proxies with authorization (with login and password) are also supported. Changing browser time zone and languages depending on proxy.
