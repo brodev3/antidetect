@@ -26,6 +26,19 @@ The application will allow you to increase your anonymity on the web. You can us
 > [!NOTE]
 > This section I plan to regularly add and improve the application for users (if there will be any)...
 > 
+
+The aim of my project, the "Anti-Detect browser," is to empower users with the ability to create and manage multiple virtual browser profiles, ensuring their anonymity and privacy online. Through the "Anti-Detect Browser," users gain the following capabilities:
+
+- **Creating Custom Browser Profiles**: Users can craft browser profiles tailored to their specific needs, with unique configurations and settings.
+- **Proxy Integration**: Each profile supports the integration of proxy servers, enabling anonymous connections to the Internet.
+
+- **Fingerprint Masking**: I've implemented features to mask and alter digital browser fingerprints like User-Agent and Canvas Fingerprint, allowing users to evade tracking systems effectively.
+
+- **Enhanced Privacy Features**: Users have the ability to disable potentially identifying features such as WebRTC and Canvas Fingerprinting, thus elevating their level of anonymity and privacy.
+
+- **Secure Data Management**: The project provides users with the means to manage their own data storage for each profile, ensuring data isolation and privacy between profiles.
+
+With the "Anti-Detect browser," I aim to offer users a comprehensive toolset to navigate the online world with confidence, knowing that their privacy and anonymity are prioritized.
 ### Profile manager
 
  Using the user interface you can create an unlimited number of Chromium profiles and interact with them. 
