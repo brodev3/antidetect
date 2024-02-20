@@ -40,29 +40,37 @@ The aim of my project, the "Antidetect browser," is to empower users with the ab
 
 With the "Antidetect browser," I aim to offer users a comprehensive toolset to navigate the online world with confidence, knowing that their privacy and anonymity are prioritized.
 
-## Profiles
+## Review
 
-
+### Profiles
 Profiles is a individual browser instances, similar to profiles in the Google Chrome browser. Each profile has its own storage, settings, and data, which can be stored either in the cloud for accessibility and synchronization across devices or locally on your system for increased confidentiality and security.
-
+<p align="center">
+      <img src="https://i.ibb.co/SNbBrNz/1.gif" >
+</p>
 The application provides a convenient and simple interface accessible through a console application. Users can easily create and manage profiles, including setting up proxy connections and spoofing browser fingerprints.
 
+### Dashboard
+
+The Dashboard is a Google Sheets document containing information about browser profiles. With this table, you can easily manage your profiles, make changes, and track relevant information.
+
+What you can do with the Dashboard:
+
+- **Sorting and Filtering**: Easily find information by sorting and filtering data in the table.
+
+- **Profile Management**: Create and modify profiles, configuring proxies and fingerprinting.
+
+- **Choosing Profiles for Work**: Simply select the desired profiles from the Dashboard for use in the console application. To do this, set the value "X" for the select column in the profile row.
+
+This table serves as a database for the application. Information from the cells is used to open the browser, such as profile name and proxy settings.
+
+The Dashboard makes managing your profiles quick, convenient, and efficient.
 
 <p align="center">
-      <img src="https://i.ibb.co/xSPb3fL/image-2023-12-10-02-42-04.png" >
+      <img src="https://i.ibb.co/wYQ9jD5/image-2024-02-21-05-23-39.png" >
 </p>
 
-**Standard features:** 
-- open, 
-- delete
-- rename, 
-- proxy connection,
-- fingerprint change.
+The Dashboard can be customized to suit your needs, with additional columns added to track more information. In the example below, four additional parameters are included: Gmail, Twitter, Telegram, and Discord. These indicate the presence of an active session in the profile on each platform. You can easily track the status of your profiles across different platforms directly from the Dashboard.
 
-  
-  <p align="center">
-      <img src="https://i.ibb.co/cLmGXTX/image-2023-12-10-03-12-29.png" >
-</p>
 
 ### Fingerprint
 
