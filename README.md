@@ -1,4 +1,4 @@
-# Anti-detect browser
+# Antidetect browser
 <p>
       <img src="https://i.ibb.co/3sHQCSp/av.jpg" >
 </p>
@@ -27,7 +27,7 @@ The application will allow you to increase your anonymity on the web. You can us
 > This section I plan to regularly add and improve the application for users (if there will be any)...
 > 
 
-The aim of my project, the "Anti-Detect browser," is to empower users with the ability to create and manage multiple virtual browser profiles, ensuring their anonymity and privacy online. Through the "Anti-Detect Browser," users gain the following capabilities:
+The aim of my project, the "Antidetect browser," is to empower users with the ability to create and manage multiple virtual browser profiles, ensuring their anonymity and privacy online. Through the "Antidetect browser," users gain the following capabilities:
 
 - **Creating Custom Browser Profiles**: Users can craft browser profiles tailored to their specific needs, with unique configurations and settings.
 - **Proxy Integration**: Each profile supports the integration of proxy servers, enabling anonymous connections to the Internet.
@@ -38,14 +38,15 @@ The aim of my project, the "Anti-Detect browser," is to empower users with the a
 
 - **Secure Data Management**: The project provides users with the means to manage their own data storage for each profile, ensuring data isolation and privacy between profiles.
 
-With the "Anti-Detect browser," I aim to offer users a comprehensive toolset to navigate the online world with confidence, knowing that their privacy and anonymity are prioritized.
-### Profile manager
+With the "Antidetect browser," I aim to offer users a comprehensive toolset to navigate the online world with confidence, knowing that their privacy and anonymity are prioritized.
 
- Using the user interface you can create an unlimited number of Chromium profiles and interact with them. 
+## Profiles
 
- Profiles are available in the profile list, sorted by the age of the profile, where you can select any profile and interact with it.
 
-The list of profiles is closed, moving the cursor next on the last profile will take you to the first profile and vice versa. 
+Profiles is a individual browser instances, similar to profiles in the Google Chrome browser. Each profile has its own storage, settings, and data, which can be stored either in the cloud for accessibility and synchronization across devices or locally on your system for increased confidentiality and security.
+
+The application provides a convenient and simple interface accessible through a console application. Users can easily create and manage profiles, including setting up proxy connections and spoofing browser fingerprints.
+
 
 <p align="center">
       <img src="https://i.ibb.co/xSPb3fL/image-2023-12-10-02-42-04.png" >
