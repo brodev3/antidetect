@@ -100,19 +100,17 @@ The full list can be viewed on the service's website.
 
 ### Proxy
 
-You can use a proxy for each profile.
-Available options:
-- set proxy,
-- delete proxy, will be use real IP.
-  
-The browser supports two types of proxy servers - https and socks5. 
+The browser supports proxies, you can configure them in both the dashboard and the console application. The following connection protocols are available: HTTPS and SOCKS5, you can connect to proxies using login and password is possible. 
 
-Proxies with authorization (with login and password) are also supported. Changing browser time zone and languages depending on proxy.
+The browser automatically sets the time, language, and geolocation according to your proxy settings, and also prevents IP address leakage through WebRTC.
 ### Cloud
+> [!NOTE]
+> In development...
+>
+> 
+You have convenient storage options for profile data, both locally and in the cloud. Forget about the limitations of a single device — cloud storage allows you to access your profiles from any device or collaborate within a team. 
 
-For teamwork, saving space on your device and accessibility, you can use the cloud to store profile data.
-
- I use google drive, that way you can work with your profiles from different devices.
+For cloud integration, you need a service that provides a virtual disk, displaying the contents of your cloud storage
 
 ## Installation and launch
 
