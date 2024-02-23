@@ -55,7 +55,7 @@ What you can do with the Dashboard:
 
 - **Profile Management**: Create and modify profiles, configuring proxies and fingerprinting.
 
-- **Choosing Profiles for Work**: Simply select the desired profiles from the Dashboard for use in the console application. To do this, set the value "X" for the select column in the profile row.
+- **Selecting multiple profiles:**: Simply select the desired profiles from the Dashboard for use in the console application. To do this, set the value "X" for the select column in the profile row.
 
 This table serves as a database for the application. Information from the cells is used to open the browser, such as profile name and proxy settings.
 
