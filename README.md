@@ -23,10 +23,6 @@ The application will allow you to increase your anonymity on the web. You can us
 
 ## Usage
 
-> [!NOTE]
-> This section I plan to regularly add and improve the application for users (if there will be any)...
-> 
-
 The aim of my project, the "Antidetect browser," is to empower users with the ability to create and manage multiple virtual browser profiles, ensuring their anonymity and privacy online. Through the "Antidetect browser," users gain the following capabilities:
 
 - **Creating Custom Browser Profiles**: Users can craft browser profiles tailored to their specific needs, with unique configurations and settings.
@@ -80,22 +76,30 @@ The service offers extensive capabilities for effective masking, the main ones o
 <p align="center">
       <img src="https://i.ibb.co/d67mf4W/2.png" >
 </p>
-The main properties are:
-- UserAgent,
--  navigator,
-- WebGL,
-- WebRTC,
-- screen and viewport
-  (free mode is limited and you can get a print with a large screen size,
-you can apply the size of your monitor to the profile,
-to do this you need to move the profile window to the top border of the screen with the cursor),
-- Timezone,
-- Language,
- - Devices,
-- fonts,
-- etc...
-  
-The full list can be viewed on the service's website.
+The effectiveness of this masking has been confirmed in practice. Test results are similar to another antidetect browser (AdsPower) and are presented below.
+
+
+
+For testing, the following tools were used:
+1. [CreepJS](https://abrahamjuliot.github.io/creepjs/)
+2. [FingerprintJS](https://fingerprintjs.github.io/fingerprintjs/)
+3. [Incolumitas](https://bot.incolumitas.com/)
+4. [Fingerprint.com](https://fingerprint.com/products/bot-detection/)
+
+<p align="center">
+      <img src="https://i.ibb.co/r785yxp/creepsjs.png" >
+</p>
+<p align="center">
+      <img src="https://i.ibb.co/VYH6BP3/fingerprintjs.png" >
+</p>
+<p align="center">
+      <img src="https://i.ibb.co/zS4C6b4/Behavioral.png" >
+</p>
+<p align="center">
+      <img src="https://i.ibb.co/J5Xdzds/fingerprint-com.png" >
+</p>
+
+Certainly, these results are quite subjective, but you can use this data to compare the Antidetect browser with AdsPower. Providing a real assessment of browser masking is challenging, but the free Antidetect browser demonstrates a level comparable to the paid AdsPower.
 
 ### Proxy
 
@@ -116,6 +120,11 @@ For cloud integration, you need a service that provides a virtual disk, displayi
 ## Guides
 
 ## Future development
+
+> [!NOTE]
+> This section I plan to regularly add and improve the application for users (if there will be any)...
+> 
+
 
 - [Service Name](Page Link)
 
