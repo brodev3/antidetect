@@ -74,13 +74,12 @@ The Dashboard can be customized to suit your needs, with additional columns adde
 
 ### Fingerprint
 
-When you create a profile you get a new fingerprint and save it to use it in future work. 
-Available options:
-- change fingerprint,
-- delete fingerprint, will be use the fingerprint of your device.
-  
-The [FingerprintSwitcher](https://fingerprints.bablosoft.com/) service provides free fingerprints that are used in the application. This gives us unique browser properties that we apply to our profiles. 
+The application allows you to change the digital fingerprint of each profile. When creating a new profile, a digital fingerprint is assigned to it, which you can later modify. Using the [FingerprintSwitcher](https://fingerprints.bablosoft.com/#home), we obtain the real fingerprint in JSON format and apply it to open the profile with that fingerprint.
 
+The service offers extensive capabilities for effective masking, the main ones of which are outlined below.
+<p align="center">
+      <img src="https://i.ibb.co/d67mf4W/2.png" >
+</p>
 The main properties are:
 - UserAgent,
 -  navigator,
