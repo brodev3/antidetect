@@ -115,9 +115,8 @@ You have convenient storage options for profile data, both locally and in the cl
 
 For cloud integration, you need a service that provides a virtual disk, displaying the contents of your cloud storage
 
-## Installation and launch
+## Installation and guides
 
-## Guides
 
 ## Future development
 
