@@ -48,6 +48,8 @@ let open_Profile = async function (name){
     if (check == true && check != undefined)
         return console.log(utils.timeLog() + ` Profile ${name} already open`);
     console.log(utils.timeLog() + ` Opening profile ${name}...`);
+    if (!fs.existsSync(dir))
+        await create_Profile(name, {fingerprint: true});
     let page = await browser.launch(name, profile);
     await db.open_Profile(name);
     active[name] = page;
