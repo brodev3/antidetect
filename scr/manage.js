@@ -18,9 +18,18 @@ async function saveFP(dir){
 };
 
 let create_Profile = async function (name, options) {
+    let dir;
+    let storageType = await utils.storageType;
+    switch(storageType){
+      case 'Cloud':
+        dir = config.cloudDir + `profiles/${name}`;
+        break;
+      case 'Local':
+        dir = config.storageDir + `profiles/${name}`;
+        break;
+    };
     if (await db.check_Profile(name))
         return console.log(utils.timeLog() + ` Profile ${name} already created`);
-    let dir = config.cloudDir + `profiles/${name}`;
     if (fs.existsSync(dir))
         return console.log(utils.timeLog() + 
         ` Profile's folder ${name} already created. If you want to create new profile ${name} then delete folder ${name} in ${config.cloudDir + 'profiles'}.`);
@@ -48,6 +57,16 @@ let open_Profile = async function (name){
     if (check == true && check != undefined)
         return console.log(utils.timeLog() + ` Profile ${name} already open`);
     console.log(utils.timeLog() + ` Opening profile ${name}...`);
+    let dir;
+    let storageType = await utils.storageType;
+    switch(storageType){
+      case 'Cloud':
+        dir = config.cloudDir + `profiles/${name}`;
+        break;
+      case 'Local':
+        dir = config.storageDir + `profiles/${name}`;
+        break;
+    };
     if (!fs.existsSync(dir))
         await create_Profile(name, {fingerprint: true});
     let page = await browser.launch(name, profile);
