@@ -28,8 +28,6 @@ let create_Profile = async function (name, options) {
         dir = config.storageDir + `profiles/${name}`;
         break;
     };
-    if (await db.check_Profile(name))
-        return console.log(utils.timeLog() + ` Profile ${name} already created`);
     if (fs.existsSync(dir))
         return console.log(utils.timeLog() + 
         ` Profile's folder ${name} already created. If you want to create new profile ${name} then delete folder ${name} in ${config.cloudDir + 'profiles'}.`);
