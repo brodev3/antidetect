@@ -28,7 +28,10 @@ let launch = async function (name, profile){
   
   if (await profile.get('fingerprint') == true){
     let fp = JSON.stringify(JSON.parse(fs.readFileSync(dir + '/fp.json')));
-    plugin.useFingerprint(fp);
+    plugin.useFingerprint(fp, {    
+      // safeElementSize: true,
+      emulateSensorAPI: false,
+    });
   }
   else 
     options.profile.loadFingerprint = false;
@@ -57,10 +60,10 @@ let launch = async function (name, profile){
     delete manage.active[name];
     switch(storageType){
       case 'Cloud':
-        setTimeout(db.close_Profile, 180000, name);
+        setTimeout(db.close_Profile, 5000, name);
         break;
       case 'Local':
-        setTimeout(db.close_Profile, 7000, name);
+        setTimeout(db.close_Profile, 3000, name);
         break;
     };
   });

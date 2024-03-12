@@ -6,7 +6,9 @@ const tags = ['Email', 'Gmail', 'Twitter', 'Metamask', 'Phantom', 'Discord'];
 const googleEmail = process.env.GOOGLEEMAIL;
 const googleKey = process.env.GOOGLEKEY;
 const googleSheetID = process.env.GOOGLESHEETID;
+const fpkey = process.env.FPKEY
 
+module.exports.fpkey = fpkey;
 module.exports.cloudDir = cloudDir;
 module.exports.storageDir = storageDir;
 module.exports.tags = tags;
