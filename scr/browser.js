@@ -4,6 +4,7 @@ const db = require('./db');
 const { plugin } = require('playwright-with-fingerprints');
 const fs = require('fs');
 const manage = require('./manage');
+const fingerprint = require('./fingerprint');
 
 let launch = async function (name, profile){
   let dir;
@@ -16,6 +17,12 @@ let launch = async function (name, profile){
       dir = config.storageDir + `profiles/${name}`;
       break;
   };
+
+  if (!fs.existsSync(dir + '/fp.json')){
+    let fp = await fingerprint();
+    let data = JSON.parse(fp);
+    fs.writeFileSync(dir +'/fp.json', JSON.stringify(data));
+  }
 
   let options = {
     profile: {},
@@ -70,7 +77,10 @@ let launch = async function (name, profile){
 
   let page = await browser.newPage();
   try{
-    await page.goto('https://abrahamjuliot.github.io/creepjs/');
+    if (name.includes('Grass'))
+      await page.goto('https://app.getgrass.io/dashboard');
+    else
+      await page.goto('https://abrahamjuliot.github.io/creepjs/');
   }
   catch(err){
     await page.goto('https://google.com/');
