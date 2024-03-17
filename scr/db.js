@@ -95,7 +95,7 @@ const auth = new JWT({
 });
 
 const doc = new GoogleSpreadsheet(config.googleSheetID, auth);
-const limiter = new RateLimiter({ tokensPerInterval: 1, interval: 2000 });
+const limiter = new RateLimiter({ tokensPerInterval: 45, interval: "minute" });
 
 let db = {};
 let sheet;
