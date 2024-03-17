@@ -95,7 +95,7 @@ const auth = new JWT({
 });
 
 const doc = new GoogleSpreadsheet(config.googleSheetID, auth);
-const limiter = new RateLimiter({ tokensPerInterval: 50, interval: "minute" });
+const limiter = new RateLimiter({ tokensPerInterval: 1, interval: 2000 });
 
 let db = {};
 let sheet;
@@ -107,7 +107,7 @@ async function connect(){
 };
 
 async function check_Profile(name){
-    await limiter.removeTokens(2);
+    await limiter.removeTokens(4);
     await connect();
     let rows = await sheet.getRows();
     for (let i = 0; i < rows.length; i++){
@@ -119,7 +119,7 @@ async function check_Profile(name){
 };
 
 async function update_Profile(name, data){
-    await limiter.removeTokens(4);
+    await limiter.removeTokens(5);
     await connect();
     let check = await check_Profile(name);
     if (check == false)
@@ -132,7 +132,7 @@ async function update_Profile(name, data){
 };
 
 async function get_Profile(name){
-    await limiter.removeTokens(3);
+    await limiter.removeTokens(4);
     await connect();
     let rows = await sheet.getRows();
     for (let i = 0; i < rows.length; i++){
@@ -143,7 +143,7 @@ async function get_Profile(name){
 };
 
 let open_Profile = async function(name){
-    await limiter.removeTokens(3);
+    await limiter.removeTokens(4);
     await connect();
     let profile = await get_Profile(name);
     await profile.assign({open: 1});

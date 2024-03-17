@@ -67,6 +67,8 @@ let open_Profile = async function (name){
     };
     if (!fs.existsSync(dir))
         await create_Profile(name, {fingerprint: true});
+    if (!fs.existsSync(dir + '/fp.json'))
+        await saveFP(dir);
     let page = await browser.launch(name, profile);
     await db.open_Profile(name);
     active[name] = page;
