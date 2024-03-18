@@ -82,7 +82,7 @@ let openSelected = async function(){
     let profiles = await db.get_Selected();
     console.log(utils.timeLog() + 'Selected profiles: ' + profiles);
     for (let i = 0; i < profiles.length; i++){
-        manage.open_Profile(profiles[i]);
+        await manage.open_Profile(profiles[i]);
     };
 };
 

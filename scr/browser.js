@@ -67,25 +67,32 @@ let launch = async function (name, profile){
       ignoreDefaultArgs: ["--enable-automation", `--allow-file-access-from-files`],
       
     });
-  });
-  browser.name = name;
-  browser.on('close', async data => {
-    console.log(utils.timeLog() + `Profile ${name} closed`);
-    delete manage.active[name];
-    switch(storageType){
-      case 'Cloud':
-        setTimeout(db.close_Profile, 5000, name);
-        break;
-      case 'Local':
-        setTimeout(db.close_Profile, 3000, name);
-        break;
-    };
+
+    browser.name = name;
+    browser.on('close', async data => {
+      let name = data.name;
+      console.log(utils.timeLog() + `Profile ${name} closed`);
+      delete manage.active[name];
+      switch(storageType){
+        case 'Cloud':
+          setTimeout(db.close_Profile, 5000, name);
+          break;
+        case 'Local':
+          setTimeout(db.close_Profile, 3000, name);
+          break;
+      };
+    });  
   });
 
   let page = await browser.newPage();
   try{
-    if (name.includes('Grass'))
+    if (name.includes('Grass')){
       await page.goto('https://app.getgrass.io/dashboard');
+      let page2 = await browser.newPage();
+      await page2.goto('https://chromewebstore.google.com/detail/ilehaonighjijnmpnagapkhpcdbhclfg/');
+      let page3 = await browser.newPage();
+      await page3.goto('https://www.google.com/search?q=' + name);
+    }
     else
       await page.goto('https://abrahamjuliot.github.io/creepjs/');
   }

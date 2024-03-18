@@ -95,7 +95,16 @@ let delete_ProfileProxy = async function (name){
 
 let change_ProfileFP = async function (name){
     let profileData = {};
-    let dir = config.cloudDir + `profiles/${name}`;
+    let storageType = await utils.storageType;
+    let dir;
+    switch(storageType){
+        case 'Cloud':
+          dir = config.cloudDir + `profiles/${name}`;
+          break;
+        case 'Local':
+          dir = config.storageDir + `profiles/${name}`;
+          break;
+    };
     await saveFP(dir);
     profileData.fingerprint = 1;
     await db.update_Profile(name, profileData);
