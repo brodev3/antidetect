@@ -81,13 +81,18 @@ let launch = async function (name, profile){
           setTimeout(db.close_Profile, 3000, name);
           break;
       };
+      await data.close();
     });  
   });
 
   let page = await browser.newPage();
   try{
     if (name.includes('Grass')){
-      await page3.goto('https://www.google.com/search?q=' + name);
+      await page.goto('https://app.getgrass.io/dashboard');
+      // let page2 = await browser.newPage();
+      // await page2.goto('https://chromewebstore.google.com/detail/ilehaonighjijnmpnagapkhpcdbhclfg/');
+      // let page = await browser.newPage();
+      // await page.goto('https://www.google.com/search?q=' + name);
     }
     else
       await page.goto('https://abrahamjuliot.github.io/creepjs/');
