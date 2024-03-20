@@ -81,7 +81,6 @@ let launch = async function (name, profile){
           setTimeout(db.close_Profile, 3000, name);
           break;
       };
-      await data.close();
     });  
   });
 
