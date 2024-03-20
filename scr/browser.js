@@ -87,7 +87,13 @@ let launch = async function (name, profile){
   let page = await browser.newPage();
   try{
     if (name.includes('Grass')){
-      await page.goto('https://app.getgrass.io/dashboard');
+      try {
+        await page.goto('https://app.getgrass.io/dashboard');
+      }
+      catch (err){
+        console.log(utils.timeLog() + ' Bad proxy at ' + name);
+        await browser.close();
+      }
       // let page2 = await browser.newPage();
       // await page2.goto('https://chromewebstore.google.com/detail/ilehaonighjijnmpnagapkhpcdbhclfg/');
       // let page = await browser.newPage();
