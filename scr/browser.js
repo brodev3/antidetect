@@ -41,7 +41,7 @@ let proxyChecker = async function (type, proxy, auth){
       httpsAgent: proxyAgent
     });
   };
-  if (check.ok)
+  if (check)
     return true;
   esle 
     return false;
