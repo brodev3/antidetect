@@ -35,7 +35,7 @@ let create_Profile = async function (name, options) {
     let profile = {
         name: name,
         open: '',
-        proxy: '',
+        // proxy: '',
         fingerprint: '',
     };
     if (options && options.fingerprint == true){
@@ -78,7 +78,7 @@ let open_Profile = async function (name){
     return page;
 };
 
-
+// open_Profile('')
 
 let set_ProfileProxy = async function (name, proxy){
     let profileData = {};
