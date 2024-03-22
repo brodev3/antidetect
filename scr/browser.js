@@ -93,14 +93,15 @@ let launch = async function (name, profile){
       let proxy = await profile.get('proxy');
       let login = proxy.split(':', -2);
       proxy = proxy.split(':', 2);
-      let check = await proxyChecker('https', proxy, login);
+      login = login[2] + ':' + login[3];
+      let check = await proxyChecker('https', proxy.join(":"), login);
       if (check == false){
         console.log(utils.timeLog() + ' Bad proxy at ' + name);
         browser =  false;
         return false;
       } 
 
-      plugin.useProxy(`${proxyType}://${login.join(":")}:${proxy.join(":")}`, 
+      plugin.useProxy(`${proxyType}://${login}:${proxy.join(":")}`, 
         options.proxy);
     }
     else 
