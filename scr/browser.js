@@ -7,6 +7,45 @@ const manage = require('./manage');
 const fingerprint = require('./fingerprint');
 const AsyncLock = require('async-lock');
 const lock = new AsyncLock();
+const axios = require('axios');
+const SocksProxyAgent = require("socks-proxy-agent")
+
+let proxyChecker = async function (type, proxy, auth){
+  let host = proxy.split(':')[0];
+  let port = proxy.split(':')[1]
+  let username = auth.split(':')[0];
+  let password = auth.split(':')[1];
+  let check;
+  if (type == 'https'){
+    try {
+      check = await axios.get('http://ip.bablosoft.com/', {
+      proxy: {
+        protocol: 'http',
+        host: host,
+        port: port,
+        auth: {
+          username,
+          password,
+        },
+      },
+    });
+    } catch (err){
+      check = false;
+    }
+   };
+  if (type == 'socks5'){
+    let proxyURL = `socks://${auth}@${proxy}`;
+    let proxyAgent = new SocksProxyAgent(proxyURL);
+    check = await axios.get('http://ip.bablosoft.com/', {
+      httpAgent: proxyAgent,
+      httpsAgent: proxyAgent
+    });
+  };
+  if (check.ok)
+    return true;
+  esle 
+    return false;
+}
 
 let launch = async function (name, profile){
   let browser;
@@ -54,6 +93,12 @@ let launch = async function (name, profile){
       let proxy = await profile.get('proxy');
       let login = proxy.split(':', -2);
       proxy = proxy.split(':', 2);
+      let check = await proxyChecker('https', proxy, login);
+      if (!check){
+        console.log(utils.timeLog() + ' Bad proxy at ' + name);
+        return false;
+      } 
+
       plugin.useProxy(`${proxyType}://${login.join(":")}:${proxy.join(":")}`, 
         options.proxy);
     }

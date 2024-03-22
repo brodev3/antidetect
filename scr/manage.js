@@ -70,6 +70,8 @@ let open_Profile = async function (name){
     if (!fs.existsSync(dir + '/fp.json'))
         await saveFP(dir);
     let page = await browser.launch(name, profile);
+    if (!page)
+        return false;
     await db.open_Profile(name);
     active[name] = page;
     console.log(utils.timeLog() + ` Profile ${name} open`);
