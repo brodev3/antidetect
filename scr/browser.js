@@ -94,8 +94,9 @@ let launch = async function (name, profile){
       let login = proxy.split(':', -2);
       proxy = proxy.split(':', 2);
       let check = await proxyChecker('https', proxy, login);
-      if (!check){
+      if (check == false){
         console.log(utils.timeLog() + ' Bad proxy at ' + name);
+        browser =  false;
         return false;
       } 
 
@@ -128,7 +129,9 @@ let launch = async function (name, profile){
       };
     });  
   });
-
+  if (browser == false)
+    return false;
+  
   let page = await browser.newPage();
   try{
     if (name.includes('Grass')){
