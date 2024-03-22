@@ -43,7 +43,7 @@ let proxyChecker = async function (type, proxy, auth){
   };
   if (check)
     return true;
-  esle 
+  else 
     return false;
 }
 
