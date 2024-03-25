@@ -8,7 +8,7 @@ const fingerprint = require('./fingerprint');
 const AsyncLock = require('async-lock');
 const lock = new AsyncLock();
 const axios = require('axios');
-const SocksProxyAgent = require("socks-proxy-agent")
+const {SocksProxyAgent} = require('socks-proxy-agent');
 
 let proxyChecker = async function (type, proxy, auth){
   let host = proxy.split(':')[0];
@@ -34,12 +34,13 @@ let proxyChecker = async function (type, proxy, auth){
     }
    };
   if (type == 'socks5'){
-    let proxyURL = `socks://${auth}@${proxy}`;
-    let proxyAgent = new SocksProxyAgent(proxyURL);
-    check = await axios.get('http://ip.bablosoft.com/', {
-      httpAgent: proxyAgent,
-      httpsAgent: proxyAgent
+    const proxyAgent  = new SocksProxyAgent(`socks5://${username}:${password}@${host}:${port}`);
+    const axiosInstance = axios.create({
+      httpsAgent: proxyAgent, 
+      httpAgent: proxyAgent 
     });
+    check = await axiosInstance.get('http://ip.bablosoft.com/');
+    check = check.status;
   };
   if (check)
     return true;
@@ -94,7 +95,7 @@ let launch = async function (name, profile){
       let login = proxy.split(':', -2);
       proxy = proxy.split(':', 2);
       login = login[2] + ':' + login[3];
-      let check = await proxyChecker('https', proxy.join(":"), login);
+      let check = await proxyChecker(proxyType, proxy.join(":"), login);
       if (check == false){
         console.log(utils.timeLog() + ' Bad proxy at ' + name);
         browser =  false;
