@@ -205,7 +205,7 @@ let selected_Actions = async function(){
             case 'Back':
                 return await profiles_Menu();                
         };
-        return await profiles_Menu();
+        return;
     });
 }
 
