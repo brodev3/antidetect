@@ -9,6 +9,8 @@ const AsyncLock = require('async-lock');
 const lock = new AsyncLock();
 const axios = require('axios');
 const {SocksProxyAgent} = require('socks-proxy-agent');
+const path = require('path');
+
 
 let proxyChecker = async function (type, proxy, auth){
   let host = proxy.split(':')[0];
@@ -50,7 +52,15 @@ let proxyChecker = async function (type, proxy, auth){
     return true;
   else 
     return false;
-}
+};
+
+let engine = function() {
+  let dir = path.resolve(__dirname, '..') + '/engines/' + utils.engine;
+  if (utils.engine != 'main')
+    plugin.setWorkingFolder(dir);
+  else  
+    plugin.setWorkingFolder('./data');
+};
 
 let launch = async function (name, profile){
   let browser;
@@ -74,6 +84,7 @@ let launch = async function (name, profile){
       fs.writeFileSync(dir +'/fp.json', JSON.stringify(data));
     };
 
+    engine();
     let options = {
       profile: {},
       proxy: {
@@ -147,6 +158,7 @@ let launch = async function (name, profile){
       catch (err){
         console.log(utils.timeLog() + ' Bad proxy at ' + name);
         await browser.close();
+        page = false;
       }
       // let page2 = await browser.newPage();
       // await page2.goto('https://chromewebstore.google.com/detail/ilehaonighjijnmpnagapkhpcdbhclfg/');

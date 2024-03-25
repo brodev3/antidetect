@@ -3,6 +3,7 @@ const db = require('./scr/db');
 
 
 let storageType;
+let engine = 'main';
 
 function printLogo(){
   return console.log(figlet.textSync('bro.dev', {
@@ -43,3 +44,4 @@ module.exports.printLogo = printLogo;
 module.exports.menu = menu;
 module.exports.timeLog = timeLog;
 module.exports.storageType = storageType;
+module.exports.engine = engine;

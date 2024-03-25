@@ -2,6 +2,8 @@ const inquirer = require('inquirer');
 const utils = require('../utils');
 const manage = require('../scr/manage');
 const db = require('../scr/db');
+const fs = require('fs');
+const path = require('path');
 
 let create_Profile = async function(){
     let name = false;
@@ -94,8 +96,22 @@ let deleteSelected = async function(){
     };
 };
 
+let newEngine = function(){
+    let count = db.get_Engines().length+1;
+    const parentDir = path.resolve(__dirname, '..');
+    fs.mkdirSync(parentDir + '/engines/data' + count, { recursive: true });
+    console.log(utils.timeLog() + 'Created engine: ' + 'data' + count);
+};
+
+let setEngine = function(name){
+    utils.engine = name;
+    console.log(utils.timeLog() + 'Selected engine: ' + name);
+};
+
 module.exports.setNewProxy = setNewProxy;
 module.exports.rename_Profile = rename_Profile;
 module.exports.create_Profile = create_Profile;
 module.exports.openSelected = openSelected;
 module.exports.deleteSelected = deleteSelected;
+module.exports.newEngine = newEngine;
+module.exports.setEngine = setEngine;

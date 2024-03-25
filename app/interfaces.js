@@ -18,6 +18,7 @@ let start = async function(){
         new inquirer.Separator(), 
         'Profiles',
         'Dashboard',
+        'Multiprocessing',
         'About',
         new inquirer.Separator(), 
         'Exit',
@@ -25,6 +26,9 @@ let start = async function(){
     }
     ]).then(async (answers) => {
         switch(answers.section) {
+            case 'Multiprocessing':
+                multiprocessing();
+                break;
             case 'Exit':
                 process.exit(1);
             case 'Profiles':
@@ -33,6 +37,32 @@ let start = async function(){
                 return dashboard();
         };
   });
+};
+
+let multiprocessing = async function(){
+    let choices = db.get_Engines();
+    choices.unshift(new inquirer.Separator(), 'New engine');
+    choices.push(new inquirer.Separator(), 'Back');
+    inquirer.prompt([
+        {
+          type: 'list',
+          pageSize: 20,
+          name: 'multiprocessing',
+          message: 'Select a menu item:',
+          prefix: utils.timeLog(),
+          choices: choices,
+        }
+    ]).then(async (answers) => {
+        switch(answers.multiprocessing){
+            case 'New engine':
+                commands.newEngine();
+                return multiprocessing();
+            case 'Back':
+                return start();
+        };
+        commands.setEngine(answers.multiprocessing);
+        return multiprocessing();
+    });
 };
 
 let dashboard = async function(){

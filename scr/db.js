@@ -2,89 +2,8 @@ const config = require('../config');
 const { JWT } = require('google-auth-library');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { RateLimiter } = require("limiter");
-
-// let db = {};
-// db.profiles = new Datastore({
-//     filename: config.cloudDir + 'DB_profiles.db'
-// });
-// db.tags = new Datastore({
-//     filename: config.cloudDir + 'DB_tags.db'
-// });
-// db.proxies = new Datastore({
-//     filename: config.cloudDir + 'DB_proxies.db'
-// });
-
-// let check_Profile = async function(name){
-//     await db.profiles.loadDatabaseAsync();
-//     let profile = await db.profiles.findAsync({name: `${name}`});
-//     if (profile.length != 0)
-//         return true;
-//     else 
-//         return false;
-// };
-
-// let insert_Profile = async function(data){
-//     await db.profiles.loadDatabaseAsync();
-//     await db.profiles.insertAsync(data);
-//     await db.profiles.loadDatabaseAsync();
-// };
-
-// let update_Profile = async function(name, data){
-//     await db.profiles.loadDatabaseAsync();
-//     await db.profiles.update({ name: `${name}` }, data, { upsert: true });
-//     await db.profiles.loadDatabaseAsync();
-// };
-
-// let get_Profile = async function(name){
-//     await db.profiles.loadDatabaseAsync();
-//     let profile = await db.profiles.findOneAsync({name: `${name}`});
-//     return profile;
-// };
-
-// let open_Profile = async function(name){
-//     let profile = await get_Profile(name);
-//     profile.open = true;
-//     await update_Profile(name, profile);
-// };
-
-// let close_Profile = async function(name){
-//     let profile = await get_Profile(name);
-//     profile.open = false;
-//     await update_Profile(name, profile);
-// };
-
-// let delete_Profile = async function(name){
-//     await db.profiles.loadDatabaseAsync();
-//     await db.profiles.removeAsync({name: `${name}`});
-//     await db.profiles.loadDatabaseAsync();
-// };
-
-// let check_Tag = async function(name){
-//     await db.tags.loadDatabaseAsync();
-//     let tag = await db.tags.findAsync({name: `${name}`});
-//     if (tag.length != 0)
-//         return true;
-//     else 
-//         return false;
-// };
-
-// let add_Tag = async function(name){
-//     await db.tags.loadDatabaseAsync();
-//     await db.tags.insertAsync({name: name});
-//     await db.tags.loadDatabaseAsync();
-// };
-
-// let delete_Tag = async function(name){
-//     await db.tags.loadDatabaseAsync();
-//     await db.tags.removeAsync({name: name});
-//     await db.tags.loadDatabaseAsync();
-// };
-
-// let get_Profiles = async function(){
-//     await db.profiles.loadDatabaseAsync();
-//     let profiles = await db.profiles.findAsync().sort({ _id: -1 });
-//     return profiles;
-// };
+const fs = require('fs');
+const path = require('path');
 
 const auth = new JWT({
     email: config.googleEmail,
@@ -190,6 +109,12 @@ async function get_Selected(){
     return res;
 };
 
+function get_Engines(){
+    const parentDir = path.resolve(__dirname, '..');
+    const engines = fs.readdirSync(parentDir + '/engines');
+    return engines;
+};
+
 module.exports.update_Profile = update_Profile;
 module.exports.check_Profile = check_Profile;
 module.exports.get_Profile = get_Profile;
@@ -200,3 +125,4 @@ module.exports.get_Selected = get_Selected;
 // module.exports.add_Tag = add_Tag;
 // module.exports.delete_Tag = delete_Tag;
 module.exports.get_Profiles = get_Profiles;
+module.exports.get_Engines = get_Engines;
