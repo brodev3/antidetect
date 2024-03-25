@@ -39,8 +39,12 @@ let proxyChecker = async function (type, proxy, auth){
       httpsAgent: proxyAgent, 
       httpAgent: proxyAgent 
     });
-    check = await axiosInstance.get('http://ip.bablosoft.com/');
+    try {
+      check = await axiosInstance.get('http://ip.bablosoft.com/');
     check = check.status;
+    } catch (err){
+      check = false;
+    }
   };
   if (check)
     return true;
