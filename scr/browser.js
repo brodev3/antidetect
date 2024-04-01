@@ -55,6 +55,7 @@ let proxyChecker = async function (type, proxy, auth){
 };
 
 let engine = function() {
+  plugin.setRequestTimeout(120 * 60000);
   let dir = path.resolve(__dirname, '..') + '/engines/' + utils.engine;
   if (utils.engine != 'main')
     plugin.setWorkingFolder(dir);
