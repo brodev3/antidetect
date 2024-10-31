@@ -7,6 +7,7 @@
     "inquirer": "^8.0.0",
     "limiter": "^2.1.0",
     "playwright": "^1.39.0",
-    "playwright-with-fingerprints": "^1.4.5"
+    "playwright-with-fingerprints": "^1.4.5",
+    "socks-proxy-agent": "^8.0.4"
   }
 }

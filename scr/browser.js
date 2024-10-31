@@ -129,6 +129,10 @@ let launch = async function (name, profile){
     browser = await plugin.launchPersistentContext(dir, {
       headless: false,
       ignoreDefaultArgs: ["--enable-automation", `--allow-file-access-from-files`],
+      // args: [
+      //   `--disable-extensions-except=E:/farm/antidetect/extentions/phantom`,
+      //   `--load-extension=E:/farm/antidetect/extentions/phantom`
+      // ]
       
     });
 

@@ -78,8 +78,6 @@ let open_Profile = async function (name){
     return page;
 };
 
-// open_Profile('')
-
 let set_ProfileProxy = async function (name, proxy){
     let profileData = {};
     let proxySplit = proxy.split(':');
@@ -177,9 +175,6 @@ let get_ProfilesNames = async function (){
             names.push(profiles[i].name)
     return names;
 };
-
-
-
 
 
 module.exports.create_Profile = create_Profile;
