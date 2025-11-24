@@ -1,0 +1,22 @@
+{
+  "name": "@antidetect/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.34",
+    "tslib": "^2.6.2",
+    "typescript": "^5.3.3"
+  }
+}
+
+
+
