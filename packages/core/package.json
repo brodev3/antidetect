@@ -1,0 +1,32 @@
+{
+  "name": "@antidetect/core",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsx ./node_modules/vitest/vitest.mjs run",
+    "test:watch": "tsx ./node_modules/vitest/vitest.mjs"
+  },
+  "dependencies": {
+    "@antidetect/config": "workspace:*",
+    "@antidetect/db": "workspace:*",
+    "@antidetect/runner": "workspace:*",
+    "@antidetect/shared": "workspace:*",
+    "async-lock": "^1.4.1"
+  },
+  "devDependencies": {
+    "@types/async-lock": "^1.4.2",
+    "@types/node": "^18.19.34",
+    "tslib": "^2.6.2",
+    "ts-node": "^10.9.1",
+    "tsx": "^3.14.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.3.0"
+  }
+}
+
+
+
