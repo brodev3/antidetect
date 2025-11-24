@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  id           String          @id @default(cuid())
+  name         String          @unique
+  profileDir   String
+  isOpen       Boolean         @default(false)
+  lastOpenedAt DateTime?
+  lastClosedAt DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  settings        Settings?
+  proxy           Proxy?
+  fingerprintMeta FingerprintMeta?
+  auditEntries    Audit[]
+}
+
+model Settings {
+  profileId          String  @id
+  profile            Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  headless           Boolean @default(false)
+  args               String  @default("")
+  fingerprintOptions String?
+  proxyPluginOptions String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Proxy {
+  profileId String  @id
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  protocol  String
+  host      String
+  port      Int
+  login     String?
+  password  String?
+  lastCheck DateTime?
+  latencyMs Int?
+  country   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FingerprintMeta {
+  profileId          String  @id
+  profile            Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  sha256             String
+  size               Int
+  userAgent          String?
+  browser            String?
+  os                 String?
+  fetchOptions       String?
+  fingerprintOptions String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Template {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  settings  String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Audit {
+  id        String   @id @default(cuid())
+  event     String
+  payload   String?
+  profileId String?
+  profile   Profile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([profileId])
+  @@index([event])
+}
+
+
+
