@@ -1,1 +1,3 @@
-export {};
+export interface HealthResponse {
+  status: "ok";
+}
