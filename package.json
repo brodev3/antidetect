@@ -4,9 +4,12 @@
   "type": "module",
   "packageManager": "pnpm@11.16.0",
   "scripts": {
+    "test": "vitest run apps/api/tests/app.test.ts",
     "typecheck": "tsc --noEmit -p packages/contracts/tsconfig.json && tsc --noEmit -p apps/api/tsconfig.json"
   },
   "devDependencies": {
-    "typescript": "6.0.3"
+    "@types/node": "24.13.3",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
   }
 }

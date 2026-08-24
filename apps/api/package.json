@@ -3,7 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "test": "vitest run tests/app.test.ts"
+  },
   "dependencies": {
-    "@antidetect/contracts": "workspace:*"
+    "@antidetect/contracts": "workspace:*",
+    "fastify": "5.12.1"
   }
 }

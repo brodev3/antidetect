@@ -53,9 +53,17 @@ ShardX integration, целевой persistence layer, lifecycle state machine, p
 
 ## Запуск и проверки
 
-Корневой pnpm-workspace и TypeScript baseline уже созданы. Подтверждённого clean-install/run flow для v2 пока нет.
+Корневой pnpm-workspace и TypeScript baseline уже созданы. Тестовая основа (baseline) — Vitest (фреймворк для unit- и integration-тестов, то есть модульных и интеграционных проверок); первый API-тест использует Fastify `inject()` без запуска сетевого порта.
 
-Команды установки, разработки, тестирования и демонстрации будут добавлены только после проверки на чистом окружении. До этого нельзя считать старую инструкцию `npm install && node index` инструкцией для v2.
+Проверяемые команды foundation (основы проекта):
+
+```text
+corepack pnpm install --frozen-lockfile --ignore-scripts
+corepack pnpm run typecheck
+corepack pnpm test
+```
+
+Пока это только проверки основы: полноценные команды разработки, сборки, UI и live ShardX runtime (живой запуск среды выполнения ShardX) будут добавляться отдельными шагами. Старую инструкцию `npm install && node index` нельзя считать инструкцией для v2.
 
 ## ShardX и лицензирование
 

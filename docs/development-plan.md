@@ -119,6 +119,7 @@ Exit gate:
 - создать clean v2 foundation без миграции prototype internals;
 - настроить approved Node/TypeScript/ESM/pnpm baseline;
 - создать минимальные API, web и contracts boundaries;
+- зафиксировать Vitest как тестовую основу (baseline) для unit/integration-проверок;
 - выбрать config/application-data directories;
 - добавить format, lint, typecheck, build, tests и CI skeleton;
 - исключить secrets и engine binaries из Git.
