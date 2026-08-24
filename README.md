@@ -53,7 +53,7 @@ ShardX integration, целевой persistence layer, lifecycle state machine, p
 
 ## Запуск и проверки
 
-Корневой pnpm-workspace и TypeScript baseline уже созданы. Тестовая основа (baseline) — Vitest (фреймворк для unit- и integration-тестов, то есть модульных и интеграционных проверок); первый API-тест использует Fastify `inject()` без запуска сетевого порта.
+Корневой pnpm-workspace и TypeScript baseline уже созданы. Тестовая основа (baseline) — Vitest (фреймворк для unit- и integration-тестов, то есть модульных и интеграционных проверок); первый API-тест использует Fastify `inject()` без запуска сетевого порта. API-контракты используют Zod 4 как источник истины, а Fastify подключает их через `fastify-type-provider-zod`.
 
 Проверяемые команды foundation (основы проекта):
 

@@ -116,6 +116,8 @@ packages/
 
 `packages/contracts` содержит только boundary types:
 
+Для API Zod-схема является source of truth (источником истины), а TypeScript-типы выводятся из неё через `z.infer`. Fastify использует эти схемы через `fastify-type-provider-zod`; отдельные дублирующие интерфейсы для тех же payload не создаются.
+
 - Zod request/response schemas;
 - DTO, выведенные из schemas;
 - SSE event schemas;
