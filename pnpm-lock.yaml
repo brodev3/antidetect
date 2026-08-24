@@ -8,4 +8,10 @@ importers:
 
   .: {}
 
+  apps/api:
+    dependencies:
+      '@antidetect/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+
   packages/contracts: {}
