@@ -2,7 +2,7 @@
 
 > Статус: практический Phase 0 VM-spike закрыт 2026-08-21 через согласованную корректировку scope; наблюдения достаточны для foundation, но supply-chain и live-runtime gates остаются открыты
 > Последняя ревизия: 2026-08-24
-> Текущая контрольная точка: публичная orphan-ветка `v2/public-foundation` создаётся без legacy/prototype, личных заметок и архивных материалов; практический Phase 0 VM-spike закрыт, а live ShardX adapter не разрешён.
+> Текущая контрольная точка: публичная orphan-ветка `v2/public-foundation` создана без legacy/prototype, личных заметок и архивных материалов; root commit `13855ac` содержит чистую V2-основу, практический Phase 0 VM-spike закрыт, а live ShardX adapter не разрешён.
 > Авторитетен для: порядка реализации, phase gates и acceptance scenarios
 
 Архитектура: [architecture.md](architecture.md). Границы продукта: [product-scope.md](product-scope.md).
@@ -54,7 +54,7 @@ Preservation checkpoint необходим, но сам по себе не ра�
 |---|---|---|
 | Documentation baseline | Завершён | Активный контекст отделён от архива |
 | Phase 0 — аудит репозитория и эксперимент ShardX | Практический VM-spike закрыт 21.08.2026 через `GO WITH SCOPE CHANGE`; core lifecycle/process evidence собран, непроверенные сценарии перенесены в дальнейшие gates | Scope adjustment принят; Phase 1 допускается только после отдельного `go` и без live ShardX integration |
-| Phase 1 — foundation | В работе: 24.08.2026 создана публичная orphan-ветка `v2/public-foundation`; переносится только clean V2 foundation | Чистый workspace воспроизводимо собирается и проверяется |
+| Phase 1 — foundation | В работе: 24.08.2026 создана публичная orphan-ветка `v2/public-foundation`, зафиксирован root commit `13855ac`; следующий шаг — воспроизводимая установка и проверки clean V2 foundation | Чистый workspace воспроизводимо собирается и проверяется |
 | Phase 2 — persistence/domain | Не начат | Lifecycle invariants обеспечены SQLite и тестами |
 | Phase 3 — lifecycle через fake runtime | Не начат | Concurrency/failure paths проходят deterministic tests |
 | Phase 4 — ShardX adapter | Не начат | Реальный Windows smoke flow работает |
