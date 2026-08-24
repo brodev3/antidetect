@@ -1,0 +1,88 @@
+# Реестр решений, предположений и рисков
+
+> Статус: активный
+> Последняя ревизия: 2026-08-21
+> Авторитетен для: незакрытых решений, непроверенных гипотез и active risks
+
+## Правила
+
+1. Нет evidence — нет статуса `Проверено`.
+2. Существенное принятое решение оформляется ADR; здесь остаётся строка и ссылка.
+3. Предположение становится фактом только со ссылкой на audit, test или spike report.
+4. Риск закрывается только после проверки mitigation.
+5. Vendor claims и старые version snapshots не считаются текущими фактами.
+6. Детальные Phase 0 результаты хранятся в `docs/spikes/phase-0-shardx.md`.
+
+21.08.2026 практический VM-spike закрыт через согласованную корректировку scope. Открытые решения, предположения и риски ниже не считаются принятыми: они перенесены в gates соответствующих фаз и не разрешают live ShardX integration.
+
+## Открытые решения
+
+| ID | Решение | Gate | Необходимое evidence | Статус |
+|---|---|---|---|---|
+| D-001 | Recovery живого process без `ChildProcess`: reattach, controlled termination или quarantine | До reconciliation | Crash/restart Windows spike, CDP rediscovery и safe-control tests | Открыто |
+| D-002 | Защита localhost API: strict loopback/Host/Origin или per-install token/session | До public routes | Threat model DNS rebinding, cross-site localhost и automation access | Открыто |
+| D-003 | Proxy credentials at rest: DPAPI, Credential Manager или documented file permissions | До proxy migration | Windows prototype, backup/restore и failure behavior | Открыто |
+| D-004 | `start` semantics: typed conflict/idempotency и bounded sync/async command | До start route | Реальное launch time и concurrency tests | Открыто |
+| D-005 | `interactive`/`automation` и access policy CDP endpoint | До runtime/API contract | Launch с/без CDP и reconnect experiment | Открыто |
+| D-006 | Process identity marker и закрытие spawn-to-DB crash window | До production adapter | argv/start time/userDataDir markers и orphan test | Открыто |
+| D-007 | Retention runs/events, SSE buffers и `Last-Event-ID` | До SSE persistence | Size/load/reconnect scenarios | Открыто |
+| D-008 | Engine install/update/integrity/rollback policy | До installer | SDK/CDN audit и download failure/race experiments | Открыто |
+| D-009 | Config, database, engine и profile data directories | До foundation | Windows paths, permissions и upgrade analysis | Открыто |
+| D-010 | Финальные REST routes, status codes и error mapping | До OpenAPI | Стабильные operations и D-004/D-005 | Открыто |
+| D-011 | Какая изолированная среда подтвердит зависящие от оборудования поверхности отпечатка после виртуальной машины | До подтверждения возможностей отпечатка | Отдельная проверка Windows x64 с документированными GPU — графическим процессором, шрифтами и признаками виртуализации | Открыто |
+
+## Предположения, требующие проверки
+
+| ID | Непроверенное утверждение | Проверка | Статус |
+|---|---|---|---|
+| A-001 | Версия, Node compatibility и `sdk.launch()` API ShardX из handoff всё ещё актуальны | В VM подтверждены архив SDK `@proxyshard/shardx@0.1.11`, ESM import, `new ShardX()`, `listProfiles()`, `createProfile()` и `launch()`. Точное lockfile-дерево и совместимость всего дерева зависимостей ещё проверить | Частично подтверждено |
+| A-002 | Chromium major, templates и engine capabilities соответствуют runtime | Первый `listProfiles()` получил runtime и непустую библиотеку отпечатков; один видимый запуск браузера выполнен. Chromium major, templates и заявленные capability требуют отдельных black-box checks | Частично подтверждено |
+| A-003 | Разрешение авторов на non-commercial integration сохранено и применимо | Публичные terms ProxyShard разрешают personal use; пользователь подтвердил личный некоммерческий scope без распространения engine. При изменении scope проверка открывается заново | Подтверждено для текущего scope 20.08.2026 |
+| A-004 | Поведение Chromium после аварийного завершения API и доступность markers предсказуемы | В VM однократный Node.js launcher с `cdp: false` сразу после `launch()` завершён через `process.exit(77)`: marker не нашёл процессов (`CRASH_TREE=0`). После ожидания пяти секунд тот же выход оставил шесть процессов Chromium (`DELAYED_CRASH_TREE=6`); после ручного закрытия marker дал `0`. Это контролируемая имитация потери launcher, а не crash реального API/БД; automatic discovery/reconciliation ещё отсутствуют | Частично подтверждено |
+| A-005 | CDP endpoint можно найти повторно и безопасно использовать | В VM raw `launch({ cdp: true })` получил endpoint на `127.0.0.1:53546`; запрос `/json/version` ответил, а после ручного закрытия listener исчез. В отдельном запуске второй Node.js-процесс через raw WebSocket подключился к сохранённому endpoint после завершения одноразового launcher, получил `Browser.getVersion`, затем `Browser.close` вернул `{}` и профильное дерево процессов исчезло. Crash/restart, безопасное обнаружение endpoint и access policy ещё не проверены | Частично подтверждено |
+| A-006 | Наш process можно отличить от reused PID/foreign Chromium и безопасно завершить tree | В VM raw `launch()` сообщил PID `6060`, однако дерево `chrome.exe` имело root PID `8892` с шестью детьми; `stop()` вернул успех без завершения дерева. Отдельно CDP listener принадлежал PID `4588`, тогда как SDK вернул `sdkPid=2828`. В отдельном запуске нормализованный `userDataDir` совпал у шести Chrome-процессов: root `3196` имел исторический родительский PID `6656`, равный `sdkPid`, а пять потомков имели родителя `3196`. `Browser.close` через подтверждённый endpoint очистил выборку по этому marker. Отдельно запущенный foreign Chromium с другим `userDataDir` остался живым при закрытии SDK-profile (`OWNED=0 FOREIGN=6`). Stable UUID marker, reused PID, executable signature/start time и safe tree-kill ещё проверить | Частично подтверждено |
+| A-007 | `userDataDir` lock, repeated launch, exit events и concurrent first install предсказуемы | Наблюдались штатное событие `exit`, повторное открытие сохранённого profile с той же папкой данных и сохранение безопасной закладки после закрытия/перезапуска; второй одновременный `launch()` того же profile разрешён SDK. `session.close()` вернул `CLOSE_RETURNED`, `session.stop()` — `STOP_RETURNED`, raw `launch().stop()` — `RAW_STOP_RETURNED`, но Chromium в каждом тесте остался живым; ручное закрытие оставляло список `chrome.exe` пустым. Прерванная и одновременная первая установка ещё не проверены | Частично подтверждено |
+| A-008 | Interactive mode возможен без лишней CDP exposure | В VM raw headful `launch()` без `cdp: true` вернул `cdpUrl: null`; в режиме с `cdp: true` наблюдался loopback endpoint. Повторный запуск с явным `cdp: false` вернул `CDP_URL null`; шесть Chrome-процессов, найденных по нормализованному `userDataDir`, имели `ListenerCount: 0` в `Get-NetTCPConnection -State Listen`, а после ручного закрытия выборка была пустой. Process arguments, non-TCP control и future SDK changes отдельно не проверялись | Частично подтверждено |
+| A-009 | Proxy/geo failure не вызывает direct fallback либо может быть перекрыта | В VM плохой SOCKS5 `127.0.0.1:9`: `checkProxy()` вернул `ECONNREFUSED`; `launch()` всё же создал process, но `session()` с тем же proxy не смог перейти на уникальный URL и вернул `net::ERR_PROXY_CONNECTION_FAILED`, без наблюдаемого прямого browser fallback. У profile не было `auto` geo-полей. Рабочий proxy, внешний IP, DNS/QUIC и WebRTC ещё проверить | Частично подтверждено |
+| A-010 | Proxy credentials присутствуют или отсутствуют в process argv | Inspect command line без сохранения secret | Проверить |
+| A-011 | Старый `adm-zip` advisory и override актуальны для текущего tree | `@proxyshard/shardx@0.1.11` объявляет `adm-zip ^0.5.16`; структурированные поля advisory относят `<0.6.0` к затронутому диапазону и называют `0.6.0` исправлением, хотя текст карточки противоречиво упоминает `<0.5.18`. Применяется более строгий gate; override и smoke test ещё проверить | Частично подтверждено |
+| A-012 | Fingerprint surfaces реально согласованы и меняются ожидаемо | Reproducible black-box lab | Проверить |
+| A-013 | Node 24, TypeScript 6 и выбранные framework majors совместимы | Clean install, lint, typecheck, tests, build | Проверить |
+| A-014 | Обычный CI работает на Windows/Ubuntu, реальный runtime — Windows x64 | CI matrix и manual smoke workflow | Проверить |
+| A-015 | Результаты установки, процессов, сети и поверхностей отпечатка в виртуальной машине применимы к целевой Windows в одинаковой степени | Для каждого результата указать границу применимости; аппаратно-зависимые выводы проверить отдельно | Проверить |
+
+## Активные риски
+
+| ID | Риск | Severity | Control | Статус |
+|---|---|---:|---|---|
+| R-001 | PID reuse/слабый marker приведёт к управлению чужим Chromium | Critical | Process identity, UUID marker, safe tree inspection, D-006. В VM raw `BrowserSession.pid=6060`, но фактический root Chromium — `8892`; в отдельном запуске `sdkPid=6656` был историческим родителем root `3196`, а нормализованный `userDataDir` нашёл всё дерево. Точечный `Browser.close` известного endpoint не затронул вручную запущенный foreign Chromium (`OWNED=0 FOREIGN=6`), но PID SDK и один marker нельзя принимать за достаточную identity | Активен |
+| R-002 | Proxy failure раскроет host IP | Critical | В VM недоступный SOCKS5 не дал browser navigation перейти напрямую: получен `net::ERR_PROXY_CONNECTION_FAILED`. Но `launch()` не блокирует spawn заранее, cleanup `session.close()` не подтверждён, а рабочий proxy, внешний IP, DNS/QUIC и WebRTC ещё не проверены; сохраняются fail-closed policy и external IP test, A-009 | Активен |
+| R-003 | Proxy secret попадёт в storage, API, logs, SSE, diagnostics, snapshots или argv | Critical | Secret reference, DTO boundary, redaction, no argv logging, D-003/A-010 | Активен |
+| R-004 | DB, registry и OS разойдутся после crash/race | High | Partial index, per-profile lock, listeners, reconciliation, failure tests. Наблюдения внутри VM: SDK разрешил второй одновременный `launch()` одного сохранённого profile, а `session.close()`, `session.stop()` и raw `launch().stop()` вернули управление без закрытия Chromium. Поэтому SDK не может заменить собственную защиту lifecycle v2 | Активен |
+| R-005 | Ошибка между spawn и сохранением run metadata оставит orphan | High | Marker, cleanup, orphan scan, D-006. Контролируемый выход launcher спустя пять секунд после `launch()` оставил шесть Chrome-процессов; ручное закрытие очистило marker. Нужны durable run metadata, automatic orphan scan/reconciliation и safe recovery/kill | Активен |
+| R-006 | Closed-source engine/CDN создают supply-chain/integrity risk | High | Архив SDK совпал с опубликованным SRI, но фактический поток загрузки среды выполнения получил закрытые архивы через изменяемый manifest без проверяемого опубликованного хеша/подписи. Нужны exact pin, lockfile, verify-before-extract и D-008 | Активен: текущий поток загрузки не принят |
+| R-007 | Молодой SDK изменит API или behavior | High | `BrowserRuntime` adapter, exact pin, smoke test | Активен |
+| R-008 | Localhost API будет доступен вредоносной странице | High | Loopback, same-origin, strict Host/Origin, D-002 | Активен |
+| R-009 | Download failure/race оставит повреждённую установку, считающуюся ready | High | Install lock, staging, atomic promotion, readiness check | Активен |
+| R-010 | ShardX terms ограничат распространение или commercial use | High | Текущий scope личный и некоммерческий; no bundle/mirror/redistribute, attribution и обязательное повторное согласование до продажи, публичного сервиса или распространения | Принят для текущего scope; открывается при его изменении |
+| R-011 | Уязвимая transitive dependency останется из-за SDK pin | High | Fresh audit и совместимый documented override | Активен |
+| R-012 | Runs/events/SSE buffers будут расти без ограничений | Medium | D-007, retention cleanup, bounded buffers | Активен |
+| R-013 | Срок вытеснит lifecycle/recovery/security | Medium | Сначала сокращать decorative UI/secondary features | Активен |
+| R-014 | Dirty legacy worktree или `.env` будут повреждены/раскрыты | High | Explicit checkpoint, narrow diffs/staging, never read/commit `.env` | Активен |
+| R-015 | Target или ShardX marketing claim будет выдан за подтверждённый факт | Medium | Явные статусы и evidence links | Активен |
+| R-016 | OS-specific behavior не воспроизведётся в обычном CI | Medium | Fake runtime + отдельные Windows checks | Активен |
+| R-017 | Общие папки, буфер обмена, проброс дисков или сетевой мост расширят воздействие неизвестного бинарника на основную систему | Высокий | Применены отдельный внутренний коммутатор, базовые 14 правил адаптера, два точных Allow для ARP шлюза, host firewall block VM→`192.168.250.1` и отключение перенаправления ресурсов; публичный IPv4 VM работает, а `192.168.250.1:445` отрицательно проверен; личные данные отсутствуют, пользовательских SMB-ресурсов нет, `LanmanServer` и `vmicvmsession` отключены, исходная точка создана | Активен |
+| R-018 | Поведение GPU — графического процессора, шрифтов, процессов или отпечатка в виртуальной машине будет ошибочно выдано за поведение физической Windows | Высокий | Маркировка `VM-observed` — наблюдалось в виртуальной машине, ограничения в каждом выводе и отдельная репрезентативная проверка Windows по D-011 | Активен |
+| R-019 | Неподдерживаемая или необновлённая гостевая Windows увеличит риск компрометации среды эксперимента | Высокий | Подтверждена Windows 10 Pro 22H2 `19045.6456` без ESU; по ADR-0006 риск принят только для одноразовой изолированной Phase 0. Отрицательные тесты, отсутствие данных/секретов, защита основной Windows и исходная точка подтверждены; остаются контролируемый исходящий доступ и проверенный источник ShardX | Принят для Phase 0, остаётся активным |
+| R-020 | После включения NAT текущие запреты локальных сетей оставляют доступным весь публичный IPv4; фактический маршрут VM проходит через Xray | Высокий | Применены `WinNAT` `ShardX-Temp`, статический адрес VM и шлюз; базовые private/IPv6 deny сохранены, gateway разрешён точнее и защищён host firewall block. После удаления временного прямого маршрута `1.1.1.1:443=True`, а `192.168.250.1:445=False`. Одноразовое разрешение пользователя использовано для VM-эксперимента ShardX; доменного/IP allowlist и гостевого default-outbound deny нет | Активен: широкий публичный IPv4 разрешён; повторные загрузки, обновления и запуски требуют нового решения |
+
+## Принятые v2 решения
+
+| Решение | Evidence |
+|---|---|
+| Local-first single-process control plane как target MVP | [ADR-0003](adr/0003-v2-local-control-plane.md) |
+| ShardX boundary и обязательный fake runtime | [ADR-0004](adr/0004-shardx-runtime-boundary.md) |
+| ShardX в Phase 0 запускается только в одноразовой виртуальной машине Windows x64; основной компьютер не используется | [Протокол изоляции Phase 0](spikes/phase-0-shardx.md#граница-текущего-разрешения) |
+| Windows 10 Pro без ESU допустима только как принятый остаточный риск одноразовой изолированной Phase 0 | [ADR-0006](adr/0006-phase-0-windows-10-residual-risk.md) |
+
+Исторические ADR-0001/0002 имеют статус `Superseded` и не определяют текущую v2 architecture.

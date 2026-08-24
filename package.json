@@ -1,0 +1,6 @@
+{
+  "name": "antidetect-v2",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.16.0"
+}
