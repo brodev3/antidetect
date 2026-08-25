@@ -1,8 +1,5 @@
 import { Controller, Get } from "@nestjs/common";
-import {
-  healthResponseSchema,
-  type HealthResponse,
-} from "@antidetect/contracts";
+import { healthResponseSchema, type HealthResponse } from "@antidetect/contracts";
 import { ZodResponse, createZodDto } from "nestjs-zod";
 
 class HealthResponseDto extends createZodDto(healthResponseSchema) {}

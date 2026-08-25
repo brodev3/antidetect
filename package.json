@@ -4,12 +4,19 @@
   "type": "module",
   "packageManager": "pnpm@11.16.0",
   "scripts": {
+    "format": "prettier --write \"apps/**/*.ts\" \"packages/**/*.ts\" \"*.{json,mjs}\"",
+    "format:check": "prettier --check \"apps/**/*.ts\" \"packages/**/*.ts\" \"*.{json,mjs}\"",
+    "lint": "eslint apps packages --max-warnings 0",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p packages/contracts/tsconfig.json && tsc --noEmit -p apps/api/tsconfig.json"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
     "@types/node": "24.13.3",
+    "eslint": "10.9.0",
+    "prettier": "3.9.6",
     "typescript": "6.0.3",
+    "typescript-eslint": "8.67.0",
     "vitest": "4.1.11"
   }
 }

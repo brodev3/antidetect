@@ -1,10 +1,7 @@
 import "reflect-metadata";
 import { Module } from "@nestjs/common";
 import { APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
-import {
-  ZodSerializerInterceptor,
-  ZodValidationPipe,
-} from "nestjs-zod";
+import { ZodSerializerInterceptor, ZodValidationPipe } from "nestjs-zod";
 import { HealthController } from "./health.controller.js";
 
 @Module({
