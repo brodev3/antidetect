@@ -2,7 +2,7 @@
 
 > Дата фактического аудита: 2026-08-25
 > Последнее обновление решений: 2026-08-25
-> Статус: Phase 1 идёт в публичной orphan-ветке `v2/public-foundation`; проверяемая основа реализована до прямого Fastify `/health`, NestJS поверх Fastify принят как следующая target architecture, но ещё не реализован; live ShardX integration не начата
+> Статус: Phase 1 идёт в публичной orphan-ветке `v2/public-foundation`; NestJS `/health` поверх Fastify реализован и проверен, live ShardX integration и продуктовые модули не начаты
 > Авторитетен для: ответа «что уже есть»
 > Не авторитетен для: целевой архитектуры и будущего scope
 
@@ -18,7 +18,7 @@ Antidetect v2 с ShardX пока не реализован.
 
 После отдельного `go` была создана локальная ветка `v2/foundation`, а затем отдельная публичная orphan-ветка — ветка без legacy-истории — `v2/public-foundation` в Git worktree — независимой рабочей папке — `C:\Disk_D\GitRepo\antidetect-v2-public`. Личные рабочие материалы в неё не переносятся.
 
-Цель Phase 1 — создать V2-пакеты `apps/api`, `apps/web` и `packages/contracts` непосредственно в корне новой рабочей папки, а не поверх legacy-каталогов и не внутри `v2/`. В публичной ветке уже зафиксированы корневой `package.json`, pnpm workspace, lockfile, TypeScript baseline, пакет `@antidetect/contracts` с Zod health schema и tests, а также `@antidetect/api` с прямым Fastify `/health` и `inject()` test. Последний кодовый commit текущего шага — `7a430b1`. NestJS с `FastifyAdapter` принят 25.08.2026 как целевая API-архитектура по ADR-0007, но код всё ещё использует прямой Fastify; web, база данных, browser runtime и ShardX adapter не созданы. Исходная папка `antidetect` не затронута.
+Цель Phase 1 — создать V2-пакеты `apps/api`, `apps/web` и `packages/contracts` непосредственно в корне новой рабочей папки, а не поверх legacy-каталогов и не внутри `v2/`. В публичной ветке уже зафиксированы корневой `package.json`, pnpm workspace, lockfile, TypeScript baseline, пакет `@antidetect/contracts` с Zod health schema и tests, а также `@antidetect/api` с NestJS bootstrap, `HealthController`, FastifyAdapter и проверенным `/health` через `inject()`. Последний кодовый commit текущего шага — `f04e5be`. Runtime Zod bridge остаётся открытым по `D-012`; web, база данных, browser runtime и ShardX adapter не созданы. Исходная папка `antidetect` не затронута.
 
 ## Фактическое состояние среды Phase 0
 
@@ -158,7 +158,6 @@ Manifests, lockfile и локальный `node_modules` не подтвержд
 
 ## Что не реализовано
 
-- переход API-каркаса с прямого Fastify на NestJS с `FastifyAdapter`;
 - интеграция `ShardXRuntime` в код v2; отдельный VM-spike частично выполнен, но не заменяет этот adapter — адаптер внешней среды выполнения;
 - общий `BrowserRuntime` и управляемый `FakeBrowserRuntime`;
 - таблица `browser_runs`;
