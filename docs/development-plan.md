@@ -1,8 +1,8 @@
 # План разработки Antidetect v2
 
 > Статус: практический Phase 0 VM-spike закрыт 2026-08-21 через согласованную корректировку scope; наблюдения достаточны для foundation, но supply-chain и live-runtime gates остаются открыты
-> Последняя ревизия: 2026-08-24
-> Текущая контрольная точка: публичная orphan-ветка `v2/public-foundation` создана без legacy/prototype, личных заметок и архивных материалов; root commit `13855ac` содержит чистую V2-основу, практический Phase 0 VM-spike закрыт, а live ShardX adapter не разрешён.
+> Последняя ревизия: 2026-08-25
+> Текущая контрольная точка: публичная orphan-ветка `v2/public-foundation` содержит проверяемые pnpm/TypeScript/contracts/Fastify/Vitest шаги до commit `7a430b1`; NestJS поверх Fastify принят как новая target architecture по ADR-0007, но переход ещё не реализован; live ShardX adapter не разрешён.
 > Авторитетен для: порядка реализации, phase gates и acceptance scenarios
 
 Архитектура: [architecture.md](architecture.md). Границы продукта: [product-scope.md](product-scope.md).
@@ -54,7 +54,7 @@ Preservation checkpoint необходим, но сам по себе не ра�
 |---|---|---|
 | Documentation baseline | Завершён | Активный контекст отделён от архива |
 | Phase 0 — аудит репозитория и эксперимент ShardX | Практический VM-spike закрыт 21.08.2026 через `GO WITH SCOPE CHANGE`; core lifecycle/process evidence собран, непроверенные сценарии перенесены в дальнейшие gates | Scope adjustment принят; Phase 1 допускается только после отдельного `go` и без live ShardX integration |
-| Phase 1 — foundation | В работе: 24.08.2026 создана публичная orphan-ветка `v2/public-foundation`, зафиксирован root commit `13855ac`; следующий шаг — воспроизводимая установка и проверки clean V2 foundation | Чистый workspace воспроизводимо собирается и проверяется |
+| Phase 1 — foundation | В работе: workspace, lockfile, TypeScript, contracts, Zod и Vitest baseline реализованы; текущий прямой Fastify `/health` должен быть перенесён в NestJS с `FastifyAdapter` | Чистый workspace воспроизводимо собирается, NestJS API skeleton запускается и проверяется |
 | Phase 2 — persistence/domain | Не начат | Lifecycle invariants обеспечены SQLite и тестами |
 | Phase 3 — lifecycle через fake runtime | Не начат | Concurrency/failure paths проходят deterministic tests |
 | Phase 4 — ShardX adapter | Не начат | Реальный Windows smoke flow работает |
@@ -119,17 +119,29 @@ Exit gate:
 - создать clean v2 foundation без миграции prototype internals;
 - настроить approved Node/TypeScript/ESM/pnpm baseline;
 - создать минимальные API, web и contracts boundaries;
-- зафиксировать Zod 4 как источник истины API-схем и `fastify-type-provider-zod` как Fastify-адаптер;
+- использовать NestJS как application framework — каркас приложения — и Fastify через `FastifyAdapter` как HTTP provider — HTTP-движок;
+- организовать feature modules — модули возможностей — по бизнес-границам, а не по каждой библиотеке или классу;
+- сохранить domain/application services независимыми от NestJS и регистрировать ports/adapters через providers — зависимости контейнера;
+- сохранить Zod 4 источником истины API-схем и закрыть `D-012` до первого продуктового NestJS-контракта;
 - зафиксировать Vitest как тестовую основу (baseline) для unit/integration-проверок;
 - выбрать config/application-data directories;
 - добавить format, lint, typecheck, build, tests и CI skeleton;
 - исключить secrets и engine binaries из Git.
 
+Текущая последовательность небольших шагов Phase 1:
+
+1. [x] Создать чистый pnpm workspace и зафиксировать lockfile.
+2. [x] Добавить TypeScript typecheck, contracts boundary, Zod health contract и Vitest baseline.
+3. [x] Подтвердить прямой Fastify `/health` через `inject()` как временный HTTP baseline.
+4. [ ] Перенести только `/health` и bootstrap в NestJS с `FastifyAdapter`, сохранив wire contract — сетевой контракт — и поведение теста.
+5. [ ] Выбрать и проверить единый Zod bridge по `D-012`; не создавать параллельные DTO-схемы.
+6. [ ] Добавить format, lint, build и CI skeleton отдельными проверяемыми шагами.
+
 Exit gate:
 
 - clean checkout воспроизводимо устанавливается;
 - доступные checks проходят;
-- API и web skeleton запускаются локально;
+- NestJS API и web skeleton запускаются локально;
 - команды задокументированы и проверены.
 
 ## Phase 2 — persistence/domain

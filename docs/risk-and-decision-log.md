@@ -1,7 +1,7 @@
 # Реестр решений, предположений и рисков
 
 > Статус: активный
-> Последняя ревизия: 2026-08-21
+> Последняя ревизия: 2026-08-25
 > Авторитетен для: незакрытых решений, непроверенных гипотез и active risks
 
 ## Правила
@@ -30,6 +30,8 @@
 | D-009 | Config, database, engine и profile data directories | До foundation | Windows paths, permissions и upgrade analysis | Открыто |
 | D-010 | Финальные REST routes, status codes и error mapping | До OpenAPI | Стабильные operations и D-004/D-005 | Открыто |
 | D-011 | Какая изолированная среда подтвердит зависящие от оборудования поверхности отпечатка после виртуальной машины | До подтверждения возможностей отпечатка | Отдельная проверка Windows x64 с документированными GPU — графическим процессором, шрифтами и признаками виртуализации | Открыто |
+| D-012 | Единая NestJS-интеграция Zod и OpenAPI: собственные pipe/interceptor — слои проверки и ответа — или проверенная библиотека | До первого продуктового NestJS-контракта | Одна Zod-схема задаёт runtime validation, TypeScript type и OpenAPI без независимого дублирования DTO; request/response negative tests проходят | Открыто |
+| D-013 | Структурированные Pino-логи и redaction — удаление секретов — внутри NestJS поверх Fastify | До operational logs и secret-bearing routes | Один согласованный logger, отсутствие двойных логов и tests на скрытие credentials | Открыто |
 
 ## Предположения, требующие проверки
 
@@ -47,7 +49,7 @@
 | A-010 | Proxy credentials присутствуют или отсутствуют в process argv | Inspect command line без сохранения secret | Проверить |
 | A-011 | Старый `adm-zip` advisory и override актуальны для текущего tree | `@proxyshard/shardx@0.1.11` объявляет `adm-zip ^0.5.16`; структурированные поля advisory относят `<0.6.0` к затронутому диапазону и называют `0.6.0` исправлением, хотя текст карточки противоречиво упоминает `<0.5.18`. Применяется более строгий gate; override и smoke test ещё проверить | Частично подтверждено |
 | A-012 | Fingerprint surfaces реально согласованы и меняются ожидаемо | Reproducible black-box lab | Проверить |
-| A-013 | Node 24, TypeScript 6 и выбранные framework majors совместимы | Clean install, lint, typecheck, tests, build | Проверить |
+| A-013 | Node 24, TypeScript 6, NestJS, Fastify, Zod и выбранные framework majors совместимы | Clean install, lint, typecheck, tests, build | Проверить |
 | A-014 | Обычный CI работает на Windows/Ubuntu, реальный runtime — Windows x64 | CI matrix и manual smoke workflow | Проверить |
 | A-015 | Результаты установки, процессов, сети и поверхностей отпечатка в виртуальной машине применимы к целевой Windows в одинаковой степени | Для каждого результата указать границу применимости; аппаратно-зависимые выводы проверить отдельно | Проверить |
 
@@ -81,6 +83,7 @@
 | Решение | Evidence |
 |---|---|
 | Local-first single-process control plane как target MVP | [ADR-0003](adr/0003-v2-local-control-plane.md) |
+| NestJS как application framework поверх Fastify HTTP provider | [ADR-0007](adr/0007-nestjs-over-fastify.md) |
 | ShardX boundary и обязательный fake runtime | [ADR-0004](adr/0004-shardx-runtime-boundary.md) |
 | ShardX в Phase 0 запускается только в одноразовой виртуальной машине Windows x64; основной компьютер не используется | [Протокол изоляции Phase 0](spikes/phase-0-shardx.md#граница-текущего-разрешения) |
 | Windows 10 Pro без ESU допустима только как принятый остаточный риск одноразовой изолированной Phase 0 | [ADR-0006](adr/0006-phase-0-windows-10-residual-risk.md) |

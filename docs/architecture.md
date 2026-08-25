@@ -1,7 +1,7 @@
 # Архитектура Antidetect v2
 
 > Статус: принятая целевая архитектура; реализация и поведение внешнего runtime ещё не подтверждены<br>
-> Последняя ревизия: 2026-08-13<br>
+> Последняя ревизия: 2026-08-25<br>
 > Авторитетен для: границ компонентов, lifecycle и обязательных инвариантов<br>
 > Текущее состояние: [current-state.md](current-state.md)
 > Открытые вопросы: [risk-and-decision-log.md](risk-and-decision-log.md)
@@ -50,8 +50,10 @@ Browser UI
     |
 same-origin HTTP/SSE
     |
-Fastify API
-    |-- application/domain modules
+Fastify HTTP server (`FastifyAdapter`)
+    |
+NestJS application modules/controllers
+    |-- application/domain services and ports
     |-- SQLite
     |-- in-memory process registry
     |-- filesystem
@@ -59,7 +61,9 @@ Fastify API
 ```
 
 - Windows x64 first.
+- NestJS управляет API modules, controllers и dependency injection — внедрением зависимостей; Fastify остаётся HTTP provider — HTTP-движком — через `FastifyAdapter`.
 - Fastify слушает только loopback и раздаёт собранный React SPA с того же origin.
+- Domain/application code не импортирует NestJS decorators или Fastify-specific types; framework используется на API и composition boundary — границе сборки зависимостей.
 - SQLite и application data хранятся локально.
 - Docker, Redis, queues, workers, microservices и desktop shell не входят в MVP.
 
@@ -72,20 +76,22 @@ Baseline принят по состоянию на 12 августа 2026 год
 | Runtime | Node.js 24 LTS, ESM |
 | Language | TypeScript 6.0.x |
 | Workspace | pnpm 11 workspaces без Nx/Turborepo |
-| API | Fastify 5, Zod 4, `fastify-type-provider-zod` |
-| API docs | `@fastify/swagger`, Swagger UI |
-| Logging | встроенный Pino с обязательным redaction |
+| Application framework | NestJS, feature modules и providers — зарегистрированные зависимости |
+| HTTP provider | Fastify 5 через `@nestjs/platform-fastify` и `FastifyAdapter` |
+| API contracts | Zod 4 как источник истины; точный NestJS bridge — связующий слой — открыт в `D-012` |
+| API docs | OpenAPI через NestJS; точное отображение Zod-схем открыто в `D-012` и `D-010` |
+| Logging | структурированные Pino-логи с обязательным redaction; конкретная NestJS-интеграция проверяется до добавления operational logs |
 | Events | native SSE |
 | Persistence | SQLite, `better-sqlite3`, Kysely, explicit SQL migrations |
 | Frontend | React 19, Vite 8, React Router, TanStack Query |
 | Forms/UI | React Hook Form, Zod, Tailwind CSS, shadcn/ui |
-| Tests | Vitest, Fastify `inject()`, Playwright UI tests |
+| Tests | Vitest, `@nestjs/testing`, Fastify `inject()`, Playwright UI tests |
 
 Точная версия ShardX pin принимается только после Phase 0 dependency/API audit. Автоматическое обновление запрещено.
 
 ## Границы репозитория
 
-Чистая V2-разработка ведётся в отдельной ветке `v2/foundation`, Git worktree — независимой рабочей папке — `C:\Disk_D\GitRepo\antidetect-v2`; все пути в схеме ниже должны быть заданы относительно корня этой папки. Корневые `apps/` и `packages/` прежней рабочей папки остаются legacy/prototype и не становятся частью v2.
+Чистая публичная V2-разработка ведётся в orphan-ветке — ветке без legacy-истории — `v2/public-foundation`, Git worktree — независимой рабочей папке — `C:\Disk_D\GitRepo\antidetect-v2-public`; все пути в схеме ниже заданы относительно её корня. Корневые `apps/` и `packages/` прежней рабочей папки остаются legacy/prototype и не становятся частью v2.
 
 **Принятая цель:** компактный modular monolith.
 
@@ -93,6 +99,7 @@ Baseline принят по состоянию на 12 августа 2026 год
 apps/
   api/
     src/
+      app.module.ts
       modules/
         profiles/
         proxies/
@@ -116,7 +123,7 @@ packages/
 
 `packages/contracts` содержит только boundary types:
 
-Для API Zod-схема является source of truth (источником истины), а TypeScript-типы выводятся из неё через `z.infer`. Fastify использует эти схемы через `fastify-type-provider-zod`; отдельные дублирующие интерфейсы для тех же payload не создаются.
+Для API Zod-схема является source of truth (источником истины), а TypeScript-типы выводятся из неё через `z.infer`. NestJS controllers получают схемы через единый связующий слой, который будет выбран по `D-012`; самостоятельные дублирующие DTO или `class-validator`-описания для тех же payload не создаются.
 
 - Zod request/response schemas;
 - DTO, выведенные из schemas;
@@ -124,7 +131,7 @@ packages/
 - public error codes;
 - общие enums/value types.
 
-Database entities, ShardX types, Fastify handlers и application services туда не помещаются.
+Database entities, ShardX types, NestJS controllers/providers и application services туда не помещаются.
 
 Направление зависимостей:
 
@@ -132,7 +139,7 @@ Database entities, ShardX types, Fastify handlers и application services туд
 HTTP/UI -> application services -> domain rules/ports -> infrastructure adapters
 ```
 
-Handlers выполняют validation, access/policy checks и mapping. Lifecycle logic в handlers запрещена.
+Controllers выполняют validation, access/policy checks и mapping. Lifecycle logic в controllers запрещена. NestJS providers связывают application ports с реализациями, но не заменяют сами domain rules.
 
 ## Runtime boundary
 
@@ -386,7 +393,7 @@ Prometheus/OpenTelemetry не входят в MVP без конкретного 
 - моделировать reconnectable/non-reconnectable process;
 - фиксировать вызовы без secrets.
 
-Обязательные уровни: transition unit tests, lifecycle tests с fake runtime/clock, SQLite integration tests, Fastify `inject()` tests, SSE integration tests, критические UI flows и отдельные Windows ShardX smoke tests.
+Обязательные уровни: transition unit tests, lifecycle tests с fake runtime/clock, SQLite integration tests, NestJS module tests, Fastify `inject()` integration tests, SSE integration tests, критические UI flows и отдельные Windows ShardX smoke tests.
 
 Реальный ShardX не требуется для обычного unit/integration CI.
 

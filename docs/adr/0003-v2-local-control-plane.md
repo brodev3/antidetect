@@ -1,8 +1,10 @@
 # ADR-0003: Локальный control plane для v2
 
-Статус: Accepted target
+Статус: Accepted target; выбор API framework изменён ADR-0007
 
 Дата: 2026-08-13
+
+Дополнение от 2026-08-25: [ADR-0007](0007-nestjs-over-fastify.md) заменяет только выбор прямого Fastify API. Fastify остаётся HTTP provider через `FastifyAdapter`, а application framework — каркасом приложения — становится NestJS. Остальные решения этого ADR сохраняются.
 
 ## Контекст
 

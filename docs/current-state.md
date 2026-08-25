@@ -1,12 +1,12 @@
 # Текущее состояние репозитория
 
-> Дата фактического аудита: 2026-08-24
-> Последнее обновление решений: 2026-08-24
-> Статус: Phase 1 начата; публичная orphan-ветка `v2/public-foundation` получила root commit `13855ac` с чистой V2-основой, практическое выполнение Phase 0 в VM — виртуальной машине — закрыто через согласованную корректировку scope, цепочка поставки закрытых архивов не принята, а live ShardX integration не начата
+> Дата фактического аудита: 2026-08-25
+> Последнее обновление решений: 2026-08-25
+> Статус: Phase 1 идёт в публичной orphan-ветке `v2/public-foundation`; проверяемая основа реализована до прямого Fastify `/health`, NestJS поверх Fastify принят как следующая target architecture, но ещё не реализован; live ShardX integration не начата
 > Авторитетен для: ответа «что уже есть»
 > Не авторитетен для: целевой архитектуры и будущего scope
 
-Факты о коде относятся к аудиту 13 августа. Состояние Git, состав рабочей папки и отсутствие ShardX в manifests — файлах описания пакетов — и lockfile — файле точных зависимостей — повторно проверены 19 августа; TypeScript-рефактор остаётся отброшенным прототипом по ADR-0005.
+Факты о legacy-коде относятся к аудиту 13 августа. Публичная V2-ветка, её manifests — файлы описания пакетов — lockfile — файл точных зависимостей — и минимальный API-код повторно проверены 25 августа; TypeScript-рефактор остаётся отброшенным прототипом по ADR-0005.
 
 ## Краткий вывод
 
@@ -16,9 +16,9 @@ Antidetect v2 с ShardX пока не реализован.
 
 ### Начало Phase 1 от 2026-08-21
 
-После отдельного `go` была создана локальная ветка `v2/foundation` в Git worktree — независимой рабочей папке — `C:\Disk_D\GitRepo\antidetect-v2` от сохранённого `cebcc68`. Для будущей публикации затем создана отдельная orphan-ветка `v2/public-foundation`; личные рабочие материалы в неё не переносятся.
+После отдельного `go` была создана локальная ветка `v2/foundation`, а затем отдельная публичная orphan-ветка — ветка без legacy-истории — `v2/public-foundation` в Git worktree — независимой рабочей папке — `C:\Disk_D\GitRepo\antidetect-v2-public`. Личные рабочие материалы в неё не переносятся.
 
-Цель Phase 1 — создать V2-пакеты `apps/api`, `apps/web` и `packages/contracts` непосредственно в корне новой рабочей папки, а не поверх legacy-каталогов и не внутри `v2/`. В публичной ветке уже зафиксированы корневой `package.json`, pnpm workspace, TypeScript baseline и пустой contracts boundary — граница контрактов; API, web, база данных, браузерный runtime и ShardX adapter ещё не созданы. 23.08.2026 из приватного V2-worktree удалены ровно 108 tracked-файлов legacy/prototype и старой конфигурации; публичный root commit `13855ac` содержит только разрешённые foundation-файлы, а исходная папка `antidetect` не затронута.
+Цель Phase 1 — создать V2-пакеты `apps/api`, `apps/web` и `packages/contracts` непосредственно в корне новой рабочей папки, а не поверх legacy-каталогов и не внутри `v2/`. В публичной ветке уже зафиксированы корневой `package.json`, pnpm workspace, lockfile, TypeScript baseline, пакет `@antidetect/contracts` с Zod health schema и tests, а также `@antidetect/api` с прямым Fastify `/health` и `inject()` test. Последний кодовый commit текущего шага — `7a430b1`. NestJS с `FastifyAdapter` принят 25.08.2026 как целевая API-архитектура по ADR-0007, но код всё ещё использует прямой Fastify; web, база данных, browser runtime и ShardX adapter не созданы. Исходная папка `antidetect` не затронута.
 
 ## Фактическое состояние среды Phase 0
 
@@ -111,7 +111,7 @@ Antidetect v2 с ShardX пока не реализован.
 
 - local-first control plane;
 - ShardX как единственный пользовательский browser runtime;
-- Fastify/React;
+- NestJS поверх Fastify и React;
 - SQLite/Kysely;
 - строгий lifecycle запусков;
 - process recovery;
@@ -122,7 +122,7 @@ Antidetect v2 с ShardX пока не реализован.
 
 ## Публичная Git-история
 
-Ветка `v2/public-foundation` не имеет родительской истории; её первый root commit `13855ac` — корневой commit без родительской истории — содержит только public V2 files. Local preservation branches и личные рабочие материалы не являются её предками и не публикуются вместе с v2.
+Ветка `v2/public-foundation` не имеет родительской истории; её первый root commit `13855ac` — корневой commit без родительской истории — содержит только public V2 files. Текущий проверенный кодовый ряд продолжается до `7a430b1`. Local preservation branches и личные рабочие материалы не являются её предками и не публикуются вместе с v2.
 
 ## Исторический стек discarded prototype
 
@@ -158,6 +158,7 @@ Manifests, lockfile и локальный `node_modules` не подтвержд
 
 ## Что не реализовано
 
+- переход API-каркаса с прямого Fastify на NestJS с `FastifyAdapter`;
 - интеграция `ShardXRuntime` в код v2; отдельный VM-spike частично выполнен, но не заменяет этот adapter — адаптер внешней среды выполнения;
 - общий `BrowserRuntime` и управляемый `FakeBrowserRuntime`;
 - таблица `browser_runs`;
@@ -170,9 +171,9 @@ Manifests, lockfile и локальный `node_modules` не подтвержд
 - localhost API threat model;
 - обязательный Pino redaction;
 - реальные SQLite integration tests;
-- Fastify route/SSE/UI tests;
-- полный набор Windows ShardX smoke tests — кратких проверок среды выполнения; есть только минимальное VM-evidence — доказательство из виртуальной машины;
-- подтверждённые build, test, lint и CI.
+- продуктовые NestJS/Fastify route, SSE и UI tests; существует только foundation-тест `/health`;
+- полный набор Windows ShardX smoke tests — кратких проверок среды выполнения; есть только ограниченное VM-evidence — доказательство из виртуальной машины;
+- format, lint, build и CI; TypeScript typecheck и Vitest baseline уже существуют.
 
 ## Критические расхождения с v2
 
