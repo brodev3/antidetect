@@ -1,28 +1,19 @@
-import { healthResponseSchema } from "@antidetect/contracts";
+import { NestFactory } from "@nestjs/core";
 import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
-import Fastify, { type FastifyInstance } from "fastify";
+  FastifyAdapter,
+  type NestFastifyApplication,
+} from "@nestjs/platform-fastify";
+import { AppModule } from "./app.module.js";
 
-export function buildApp(): FastifyInstance {
-  const app = Fastify({ logger: false });
-
-  app.setValidatorCompiler(validatorCompiler);
-  app.setSerializerCompiler(serializerCompiler);
-
-  app.withTypeProvider<ZodTypeProvider>().get(
-    "/health",
-    {
-      schema: {
-        response: {
-          200: healthResponseSchema,
-        },
-      },
-    },
-    async () => ({ status: "ok" as const }),
+export async function buildApp(): Promise<NestFastifyApplication> {
+  const app = await NestFactory.create<NestFastifyApplication>(
+    AppModule,
+    new FastifyAdapter({ logger: false }),
+    { logger: false },
   );
+
+  await app.init();
+  await app.getHttpAdapter().getInstance().ready();
 
   return app;
 }
