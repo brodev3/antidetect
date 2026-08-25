@@ -17,11 +17,11 @@ Phase 1 уже содержит минимальную прямую Fastify-ос
 - Сохранять modular monolith: NestJS feature modules группируются по возможностям продукта, а не по каждой библиотеке или классу.
 - Оставлять domain/application rules независимыми от NestJS decorators и Fastify types.
 - Регистрировать `BrowserRuntime`, repositories, clock и другие ports через explicit provider tokens — явные ключи зависимостей.
-- Сохранять Zod 4 источником истины API contracts. Точный NestJS bridge для validation, serialization и OpenAPI выбирается отдельно по `D-012`; независимые дублирующие DTO-схемы не допускаются.
+- Сохранять Zod 4 источником истины API contracts. Выбранный bridge для validation, serialization и OpenAPI зафиксирован в [ADR-0008](0008-zod-openapi-bridge.md); независимые дублирующие DTO-схемы не допускаются.
 - Сохранять Vitest тестовой основой. Для NestJS composition использовать `@nestjs/testing`, а HTTP integration tests выполнять через Fastify `inject()`.
 - Не считать NestJS modules системой динамических browser plugins. ShardX, будущий Bablosoft или тестовый Chromium остаются infrastructure adapters одного нашего `BrowserRuntime` contract.
 
-Минимальный NestJS bootstrap и `/health` уже реализованы и проверены в commit `f04e5be`. Этот ADR не утверждает, что продуктовые modules, persistence или lifecycle уже реализованы.
+Минимальный NestJS bootstrap, `/health` и Zod/OpenAPI bridge реализованы и проверены в commit `7202418`. Этот ADR не утверждает, что продуктовые modules, persistence или lifecycle уже реализованы.
 
 ## Причины
 
@@ -63,7 +63,7 @@ Phase 1 уже содержит минимальную прямую Fastify-ос
 
 ## Не закрытые этим ADR вопросы
 
-- единая Zod/serialization/OpenAPI integration (`D-012`);
+- детали Zod/serialization/OpenAPI integration вынесены в [ADR-0008](0008-zod-openapi-bridge.md);
 - logging/redaction integration (`D-013`);
 - финальные routes и error mapping (`D-010`);
 - совместимость выбранных major versions (`A-013`).

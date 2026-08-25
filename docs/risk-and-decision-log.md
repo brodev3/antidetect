@@ -30,7 +30,7 @@
 | D-009 | Config, database, engine и profile data directories | До foundation | Windows paths, permissions и upgrade analysis | Открыто |
 | D-010 | Финальные REST routes, status codes и error mapping | До OpenAPI | Стабильные operations и D-004/D-005 | Открыто |
 | D-011 | Какая изолированная среда подтвердит зависящие от оборудования поверхности отпечатка после виртуальной машины | До подтверждения возможностей отпечатка | Отдельная проверка Windows x64 с документированными GPU — графическим процессором, шрифтами и признаками виртуализации | Открыто |
-| D-012 | Единая NestJS-интеграция Zod и OpenAPI: собственные pipe/interceptor — слои проверки и ответа — или проверенная библиотека | До первого продуктового NestJS-контракта | Одна Zod-схема задаёт runtime validation, TypeScript type и OpenAPI без независимого дублирования DTO; request/response negative tests проходят | Открыто |
+| D-012 | Единая NestJS-интеграция Zod и OpenAPI: `nestjs-zod` 5.5.0 + `@nestjs/swagger` 11.2.0 | Первый foundation-контракт `/health` | Глобальные `ZodValidationPipe`/`ZodSerializerInterceptor`, `@ZodResponse` из контрактной схемы, `/docs-json`; typecheck и 4 Vitest-теста проходят в `7202418` | Принято и проверено |
 | D-013 | Структурированные Pino-логи и redaction — удаление секретов — внутри NestJS поверх Fastify | До operational logs и secret-bearing routes | Один согласованный logger, отсутствие двойных логов и tests на скрытие credentials | Открыто |
 
 ## Предположения, требующие проверки

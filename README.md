@@ -55,7 +55,7 @@ ShardX integration, целевой persistence layer, lifecycle state machine, p
 
 Корневой pnpm-workspace и TypeScript baseline уже созданы. Тестовая основа (baseline) — Vitest (фреймворк для unit- и integration-тестов, то есть модульных и интеграционных проверок); текущий API-тест использует Fastify `inject()` без запуска сетевого порта. API-контракты используют Zod 4 как источник истины.
 
-По [ADR-0007](docs/adr/0007-nestjs-over-fastify.md) NestJS уже используется как application framework — каркас приложения — поверх Fastify через `FastifyAdapter` для `/health`. Тест сохраняет Zod-контракт, Vitest и Fastify `inject()` без запуска сетевого порта. Точный способ runtime-подключения Zod и OpenAPI остаётся открытым решением `D-012`.
+По [ADR-0007](docs/adr/0007-nestjs-over-fastify.md) NestJS уже используется как application framework — каркас приложения — поверх Fastify через `FastifyAdapter` для `/health`. Runtime-проверка Zod подключена через `nestjs-zod`, а OpenAPI — через `@nestjs/swagger` с JSON-документом на `/docs-json`; выбор зафиксирован в [ADR-0008](docs/adr/0008-zod-openapi-bridge.md). Тест сохраняет Zod-контракт, Vitest и Fastify `inject()` без запуска сетевого порта.
 
 Проверяемые команды foundation (основы проекта):
 

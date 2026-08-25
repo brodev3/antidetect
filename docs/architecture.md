@@ -78,8 +78,8 @@ Baseline принят по состоянию на 12 августа 2026 год
 | Workspace | pnpm 11 workspaces без Nx/Turborepo |
 | Application framework | NestJS, feature modules и providers — зарегистрированные зависимости |
 | HTTP provider | Fastify 5 через `@nestjs/platform-fastify` и `FastifyAdapter` |
-| API contracts | Zod 4 как источник истины; точный NestJS bridge — связующий слой — открыт в `D-012` |
-| API docs | OpenAPI через NestJS; точное отображение Zod-схем открыто в `D-012` и `D-010` |
+| API contracts | Zod 4 как источник истины; `nestjs-zod` подключает validation/serialization — проверку входа и ответа — без дублирования схем |
+| API docs | OpenAPI через `@nestjs/swagger` и `nestjs-zod`; JSON-документ доступен на `/docs-json`, финальные routes остаются в `D-010` |
 | Logging | структурированные Pino-логи с обязательным redaction; конкретная NestJS-интеграция проверяется до добавления operational logs |
 | Events | native SSE |
 | Persistence | SQLite, `better-sqlite3`, Kysely, explicit SQL migrations |
@@ -123,7 +123,7 @@ packages/
 
 `packages/contracts` содержит только boundary types:
 
-Для API Zod-схема является source of truth (источником истины), а TypeScript-типы выводятся из неё через `z.infer`. NestJS controllers получают схемы через единый связующий слой, который будет выбран по `D-012`; самостоятельные дублирующие DTO или `class-validator`-описания для тех же payload не создаются.
+Для API Zod-схема является source of truth (источником истины), а TypeScript-типы выводятся из неё через `z.infer`. NestJS controllers получают схемы через `nestjs-zod`; `createZodDto` создаёт только framework-адаптер для метаданных, не вторую схему. Самостоятельные дублирующие DTO или `class-validator`-описания для тех же payload не создаются.
 
 - Zod request/response schemas;
 - DTO, выведенные из schemas;

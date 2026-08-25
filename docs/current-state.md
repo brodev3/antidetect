@@ -18,7 +18,7 @@ Antidetect v2 с ShardX пока не реализован.
 
 После отдельного `go` была создана локальная ветка `v2/foundation`, а затем отдельная публичная orphan-ветка — ветка без legacy-истории — `v2/public-foundation` в Git worktree — независимой рабочей папке — `C:\Disk_D\GitRepo\antidetect-v2-public`. Личные рабочие материалы в неё не переносятся.
 
-Цель Phase 1 — создать V2-пакеты `apps/api`, `apps/web` и `packages/contracts` непосредственно в корне новой рабочей папки, а не поверх legacy-каталогов и не внутри `v2/`. В публичной ветке уже зафиксированы корневой `package.json`, pnpm workspace, lockfile, TypeScript baseline, пакет `@antidetect/contracts` с Zod health schema и tests, а также `@antidetect/api` с NestJS bootstrap, `HealthController`, FastifyAdapter и проверенным `/health` через `inject()`. Последний кодовый commit текущего шага — `f04e5be`. Runtime Zod bridge остаётся открытым по `D-012`; web, база данных, browser runtime и ShardX adapter не созданы. Исходная папка `antidetect` не затронута.
+Цель Phase 1 — создать V2-пакеты `apps/api`, `apps/web` и `packages/contracts` непосредственно в корне новой рабочей папки, а не поверх legacy-каталогов и не внутри `v2/`. В публичной ветке уже зафиксированы корневой `package.json`, pnpm workspace, lockfile, TypeScript baseline, пакет `@antidetect/contracts` с Zod health schema и tests, а также `@antidetect/api` с NestJS bootstrap, `HealthController`, FastifyAdapter, глобальным Zod bridge, OpenAPI JSON и проверенными `/health`/`/docs-json`. Последний кодовый commit текущего шага — `7202418`; решение описано в [ADR-0008](adr/0008-zod-openapi-bridge.md). Web, база данных, browser runtime и ShardX adapter не созданы. Исходная папка `antidetect` не затронута.
 
 ## Фактическое состояние среды Phase 0
 
