@@ -110,7 +110,7 @@ ShardX — сторонний closed-source engine с отдельными ус�
 
 ## Открытые продуктовые решения
 
-До Phase 0 или отдельного threat-model review остаются открытыми:
+После закрытия практического Phase 0 и до реализации соответствующих слоёв или отдельного threat-model review — разбора модели угроз — остаются открытыми:
 
 - recovery policy, если к живому process нельзя reattach;
 - защита localhost API;

@@ -1,6 +1,6 @@
 # Antidetect v2
 
-> Статус на 25 августа 2026 года: публичная ветка Phase 1 содержит проверяемую TypeScript-основу и NestJS `/health` поверх Fastify; ShardX integration и продуктовый код отсутствуют.
+> Статус на 26 августа 2026 года: публичная ветка Phase 1 содержит проверяемую TypeScript-основу, NestJS `/health` поверх Fastify и quality tooling — инструменты качества; ShardX integration и продуктовый код отсутствуют.
 
 Antidetect v2 — планируемый local-first, API-first orchestrator браузерных профилей на Node.js/TypeScript для Windows x64.
 
@@ -22,7 +22,7 @@ ShardX должен предоставлять сторонний patched Chromi
 
 ## Что находится в репозитории сейчас
 
-Эта ветка содержит только чистую основу Antidetect v2. Уже созданы pnpm workspace, TypeScript baseline, пакет API-контрактов на Zod и минимальный NestJS `/health` поверх Fastify с тестами. Legacy v1, отброшенный TypeScript-прототип и личные рабочие материалы не входят в её историю.
+Эта ветка содержит только чистую основу Antidetect v2. Уже созданы pnpm workspace, TypeScript baseline, пакет API-контрактов на Zod, минимальный NestJS `/health` поверх Fastify с тестами, format/lint/build-команды и CI skeleton — каркас автоматических проверок. Legacy v1, отброшенный TypeScript-прототип и личные рабочие материалы не входят в её историю.
 
 ShardX integration, целевой persistence layer, lifecycle state machine, process recovery, SSE и web UI ещё не реализованы. Точное фактическое состояние зафиксировано в [docs/current-state.md](docs/current-state.md).
 
@@ -59,13 +59,18 @@ ShardX integration, целевой persistence layer, lifecycle state machine, p
 
 Проверяемые команды foundation (основы проекта):
 
+Предпосылка: нужен Node.js 24 с включённым Corepack — встроенным механизмом выбора версий package manager. CI ориентирован на Node.js `24.19.0`; локальный аудит выполнялся на `24.18.0`, поэтому точное совпадение среды ещё проверяется отдельным clean checkout.
+
 ```text
 corepack pnpm install --frozen-lockfile --ignore-scripts
+corepack pnpm run format:check
+corepack pnpm run lint
 corepack pnpm run typecheck
 corepack pnpm test
+corepack pnpm run build
 ```
 
-Пока это только проверки основы: полноценные команды разработки, сборки, UI и live ShardX runtime (живой запуск среды выполнения ShardX) будут добавляться отдельными шагами. Старую инструкцию `npm install && node index` нельзя считать инструкцией для v2.
+Эти команды проверяют foundation: форматирование, статический анализ, типы, тесты и компиляцию. `build` собирает contracts и API в пакетные каталоги `packages/contracts/dist` и `apps/api/dist`; после сборки API можно запустить командой `pnpm --filter @antidetect/api start` и проверить `GET http://127.0.0.1:3000/health`. По умолчанию используются `API_HOST=127.0.0.1` и `API_PORT=3000`; пример переменных находится в `.env.example` и сам по себе не загружается автоматически. Это подтверждено локальным smoke-тестом 2026-08-26. Полноценные UI и live ShardX runtime (живой запуск среды выполнения ShardX) будут добавляться отдельными шагами. CI workflow запускает тот же набор проверок на GitHub; удалённый запуск ещё не подтверждён push-операцией. Старую инструкцию `npm install && node index` нельзя считать инструкцией для v2.
 
 ## ShardX и лицензирование
 

@@ -1,7 +1,7 @@
 # Реестр решений, предположений и рисков
 
 > Статус: активный
-> Последняя ревизия: 2026-08-25
+> Последняя ревизия: 2026-08-26
 > Авторитетен для: незакрытых решений, непроверенных гипотез и active risks
 
 ## Правила
@@ -49,7 +49,7 @@
 | A-010 | Proxy credentials присутствуют или отсутствуют в process argv | Inspect command line без сохранения secret | Проверить |
 | A-011 | Старый `adm-zip` advisory и override актуальны для текущего tree | `@proxyshard/shardx@0.1.11` объявляет `adm-zip ^0.5.16`; структурированные поля advisory относят `<0.6.0` к затронутому диапазону и называют `0.6.0` исправлением, хотя текст карточки противоречиво упоминает `<0.5.18`. Применяется более строгий gate; override и smoke test ещё проверить | Частично подтверждено |
 | A-012 | Fingerprint surfaces реально согласованы и меняются ожидаемо | Reproducible black-box lab | Проверить |
-| A-013 | Node 24, TypeScript 6, NestJS, Fastify, Zod и выбранные framework majors совместимы | Clean install, lint, typecheck, tests, build | Проверить |
+| A-013 | Node 24, TypeScript 6, NestJS, Fastify, Zod и выбранные framework majors совместимы | 26.08 локально прошли frozen install, format, lint, typecheck, 4 Vitest-теста, пакетный build и запуск `apps/api/dist/main.js`; `GET /health` вернул `{"status":"ok"}`. Clean checkout и remote CI не подтверждены | Частично подтверждено |
 | A-014 | Обычный CI работает на Windows/Ubuntu, реальный runtime — Windows x64 | CI matrix и manual smoke workflow | Проверить |
 | A-015 | Результаты установки, процессов, сети и поверхностей отпечатка в виртуальной машине применимы к целевой Windows в одинаковой степени | Для каждого результата указать границу применимости; аппаратно-зависимые выводы проверить отдельно | Проверить |
 
@@ -67,7 +67,7 @@
 | R-008 | Localhost API будет доступен вредоносной странице | High | Loopback, same-origin, strict Host/Origin, D-002 | Активен |
 | R-009 | Download failure/race оставит повреждённую установку, считающуюся ready | High | Install lock, staging, atomic promotion, readiness check | Активен |
 | R-010 | ShardX terms ограничат распространение или commercial use | High | Текущий scope личный и некоммерческий; no bundle/mirror/redistribute, attribution и обязательное повторное согласование до продажи, публичного сервиса или распространения | Принят для текущего scope; открывается при его изменении |
-| R-011 | Уязвимая transitive dependency останется из-за SDK pin | High | Fresh audit и совместимый documented override | Активен |
+| R-011 | Уязвимая transitive dependency останется из-за SDK pin или foundation tooling | High | 26.08 `pnpm audit --audit-level moderate` обнаружил 9 advisories: 4 high и 5 moderate. Они приходят через `@nestjs/swagger`/`nestjs-zod` к `path-to-regexp`, `lodash` и `js-yaml`; reachability отдельно не доказана. Нужны совместимое обновление или documented override и regression checks | Активен |
 | R-012 | Runs/events/SSE buffers будут расти без ограничений | Medium | D-007, retention cleanup, bounded buffers | Активен |
 | R-013 | Срок вытеснит lifecycle/recovery/security | Medium | Сначала сокращать decorative UI/secondary features | Активен |
 | R-014 | Dirty legacy worktree или `.env` будут повреждены/раскрыты | High | Explicit checkpoint, narrow diffs/staging, never read/commit `.env` | Активен |
@@ -77,6 +77,8 @@
 | R-018 | Поведение GPU — графического процессора, шрифтов, процессов или отпечатка в виртуальной машине будет ошибочно выдано за поведение физической Windows | Высокий | Маркировка `VM-observed` — наблюдалось в виртуальной машине, ограничения в каждом выводе и отдельная репрезентативная проверка Windows по D-011 | Активен |
 | R-019 | Неподдерживаемая или необновлённая гостевая Windows увеличит риск компрометации среды эксперимента | Высокий | Подтверждена Windows 10 Pro 22H2 `19045.6456` без ESU; по ADR-0006 риск принят только для одноразовой изолированной Phase 0. Отрицательные тесты, отсутствие данных/секретов, защита основной Windows и исходная точка подтверждены; остаются контролируемый исходящий доступ и проверенный источник ShardX | Принят для Phase 0, остаётся активным |
 | R-020 | После включения NAT текущие запреты локальных сетей оставляют доступным весь публичный IPv4; фактический маршрут VM проходит через Xray | Высокий | Применены `WinNAT` `ShardX-Temp`, статический адрес VM и шлюз; базовые private/IPv6 deny сохранены, gateway разрешён точнее и защищён host firewall block. После удаления временного прямого маршрута `1.1.1.1:443=True`, а `192.168.250.1:445=False`. Одноразовое разрешение пользователя использовано для VM-эксперимента ShardX; доменного/IP allowlist и гостевого default-outbound deny нет | Активен: широкий публичный IPv4 разрешён; повторные загрузки, обновления и запуски требуют нового решения |
+| R-021 | Зелёный TypeScript build будет ошибочно принят за запускаемое приложение | High | Добавлены server entrypoint, package/build layout и smoke test из `apps/api/dist`; запуск и `/health` подтверждены. Отдельно остаются clean checkout и remote CI | Снижен, остаётся до воспроизводимости |
+| R-022 | Разные окончания строк и patch-version Node.js дадут шумный diff или несовпадение локального результата с CI | Medium | На Windows включён `core.autocrlf`, `.gitattributes` и `prettier.endOfLine` ещё не заданы; локальный audit использовал Node.js `24.18.0`, CI — `24.19.0`. Зафиксировать policy и проверить clean checkout до закрытия Phase 1 | Активен |
 
 ## Принятые v2 решения
 

@@ -69,7 +69,7 @@ NestJS application modules/controllers
 
 ## Целевой стек
 
-Baseline принят по состоянию на 12 августа 2026 года, но compatibility должна быть перепроверена перед установкой:
+Baseline принят по состоянию на 12 августа 2026 года. Локальная foundation-проверка 26 августа подтвердила Node.js 24, TypeScript 6, pnpm, NestJS, Fastify и Zod: frozen install, format, lint, typecheck, Vitest, build и API smoke проходят. Полная воспроизводимость ещё не подтверждена: clean checkout, remote CI и dependency remediation остаются открытыми.
 
 | Область | Принятая цель |
 |---|---|
@@ -408,6 +408,6 @@ Prometheus/OpenTelemetry не входят в MVP без конкретного 
 - proxy fail-closed behavior и argv exposure;
 - engine download/integrity behavior;
 - fingerprint claims;
-- compatibility target toolchain.
+- end-to-end compatibility target toolchain, включая clean checkout, remote CI и dependency review.
 
 Их статус ведётся в [risk-and-decision-log.md](risk-and-decision-log.md), а evidence — в `docs/spikes/`.

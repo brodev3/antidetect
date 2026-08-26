@@ -6,8 +6,9 @@
   "scripts": {
     "format": "prettier --write \"apps/**/*.ts\" \"packages/**/*.ts\" \"*.{json,mjs}\"",
     "format:check": "prettier --check \"apps/**/*.ts\" \"packages/**/*.ts\" \"*.{json,mjs}\"",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p packages/contracts/tsconfig.build.json && tsc -p apps/api/tsconfig.build.json",
     "lint": "eslint apps packages --max-warnings 0",
+    "pretest": "tsc -p packages/contracts/tsconfig.build.json",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p packages/contracts/tsconfig.json && tsc --noEmit -p apps/api/tsconfig.json"
   },

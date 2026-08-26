@@ -1,8 +1,8 @@
 # Текущее состояние репозитория
 
-> Дата фактического аудита: 2026-08-25
-> Последнее обновление решений: 2026-08-25
-> Статус: Phase 1 идёт в публичной orphan-ветке `v2/public-foundation`; NestJS `/health` поверх Fastify реализован и проверен, live ShardX integration и продуктовые модули не начаты
+> Дата фактического аудита: 2026-08-26
+> Последнее обновление решений: 2026-08-26
+> Статус: Phase 1 идёт в публичной orphan-ветке `v2/public-foundation`; NestJS `/health` поверх Fastify, quality tooling, пакетная сборка и запуск API smoke-проверены локально. Web отсутствует, а clean checkout/remote CI, выбор каталогов и устранение уязвимых зависимостей не подтверждены. Live ShardX integration и продуктовые модули не начаты
 > Авторитетен для: ответа «что уже есть»
 > Не авторитетен для: целевой архитектуры и будущего scope
 
@@ -18,7 +18,7 @@ Antidetect v2 с ShardX пока не реализован.
 
 После отдельного `go` была создана локальная ветка `v2/foundation`, а затем отдельная публичная orphan-ветка — ветка без legacy-истории — `v2/public-foundation` в Git worktree — независимой рабочей папке — `C:\Disk_D\GitRepo\antidetect-v2-public`. Личные рабочие материалы в неё не переносятся.
 
-Цель Phase 1 — создать V2-пакеты `apps/api`, `apps/web` и `packages/contracts` непосредственно в корне новой рабочей папки, а не поверх legacy-каталогов и не внутри `v2/`. В публичной ветке уже зафиксированы корневой `package.json`, pnpm workspace, lockfile, TypeScript baseline, пакет `@antidetect/contracts` с Zod health schema и tests, а также `@antidetect/api` с NestJS bootstrap, `HealthController`, FastifyAdapter, глобальным Zod bridge, OpenAPI JSON и проверенными `/health`/`/docs-json`. Последний кодовый commit текущего шага — `7202418`; решение описано в [ADR-0008](adr/0008-zod-openapi-bridge.md). Web, база данных, browser runtime и ShardX adapter не созданы. Исходная папка `antidetect` не затронута.
+Цель Phase 1 — создать V2-пакеты `apps/api`, `apps/web` и `packages/contracts` непосредственно в корне новой рабочей папки, а не поверх legacy-каталогов и не внутри `v2/`. В публичной ветке зафиксированы корневой `package.json`, pnpm workspace, lockfile, TypeScript baseline, пакет `@antidetect/contracts` с Zod health schema и tests, а также `@antidetect/api` с NestJS bootstrap, `HealthController`, FastifyAdapter, глобальным Zod bridge, OpenAPI JSON и проверенными `/health`/`/docs-json`. Последний foundation commit — `03d3e21`; текущий незакоммиченный diff выделяет `HealthModule` и `HealthService` как учебный пример module/provider/controller boundary и добавляет executable entrypoint — запускаемую точку входа — `main.ts`. Quality tooling включает Prettier, ESLint, TypeScript build в пакетные `dist/` и package start script; локальные format, lint, typecheck, test, build и `GET /health` smoke проходят. CI skeleton содержит те же проверки, но удалённый запуск ещё не подтверждён. Отсутствуют `apps/web`, база данных, browser runtime и ShardX adapter. Dependency audit обнаружил 9 advisories: 4 high и 5 moderate, требующих отдельного review. Legacy/prototype code исходной папки `antidetect` не переносился в публичную ветку; независимые изменения документации в исходной папке не являются частью v2.
 
 ## Фактическое состояние среды Phase 0
 
@@ -122,7 +122,7 @@ Antidetect v2 с ShardX пока не реализован.
 
 ## Публичная Git-история
 
-Ветка `v2/public-foundation` не имеет родительской истории; её первый root commit `13855ac` — корневой commit без родительской истории — содержит только public V2 files. Текущий проверенный кодовый ряд продолжается до `7a430b1`. Local preservation branches и личные рабочие материалы не являются её предками и не публикуются вместе с v2.
+Ветка `v2/public-foundation` не имеет родительской истории; её первый root commit `13855ac` — корневой commit без родительской истории — содержит только public V2 files. Текущий закоммиченный кодовый ряд продолжается до `03d3e21`; после него в worktree есть незакоммиченный учебный diff `HealthModule`/`HealthService`, который не следует выдавать за опубликованный результат. Local preservation branches и личные рабочие материалы не являются её предками и не публикуются вместе с v2.
 
 ## Исторический стек discarded prototype
 
@@ -138,7 +138,7 @@ Antidetect v2 с ShardX пока не реализован.
 | Tests | Vitest `1.6.1`, несколько mock-based core tests |
 | ShardX | отсутствует |
 | Frontend | отсутствует |
-| CI/lint/format | рабочий контур не настроен |
+| CI/lint/format | настроены в foundation; эта строка относится к историческому discarded prototype |
 
 Manifests, lockfile и локальный `node_modules` не подтверждены как согласованные.
 
@@ -172,7 +172,7 @@ Manifests, lockfile и локальный `node_modules` не подтвержд
 - реальные SQLite integration tests;
 - продуктовые NestJS/Fastify route, SSE и UI tests; существует только foundation-тест `/health`;
 - полный набор Windows ShardX smoke tests — кратких проверок среды выполнения; есть только ограниченное VM-evidence — доказательство из виртуальной машины;
-- format, lint, build и CI; TypeScript typecheck и Vitest baseline уже существуют.
+- продуктовые модули, UI, persistence и ShardX runtime; foundation format, lint, build и CI skeleton уже существуют.
 
 ## Критические расхождения с v2
 
@@ -190,12 +190,4 @@ Manifests, lockfile и локальный `node_modules` не подтвержд
 
 Проведены read-only проверки Git, структуры, manifests, lockfile, Prisma schema, core services, API draft и тестов.
 
-Build, tests и typecheck не подтверждены:
-
-- локальный `node_modules` неполон;
-- попытка pnpm-проверки требовала переустановки зависимостей и была остановлена без изменений;
-- прямой `tsc` не нашёл локальные Node type definitions;
-- зависимости не переустанавливались;
-- runtime, browser и database smoke tests не запускались.
-
-До нормализации workspace нельзя утверждать, что текущая TypeScript-миграция собирается или проходит тесты.
+Foundation-проверки повторно выполнены 25 августа 2026 года: `format:check`, `lint`, `typecheck`, `test` (2 файла, 4 теста) и `build` прошли успешно. CI workflow закоммичен, но его удалённый запуск ещё не подтверждён, поскольку push не выполнялся. Runtime, browser и database smoke tests не запускались.

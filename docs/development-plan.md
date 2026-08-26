@@ -1,8 +1,8 @@
 # План разработки Antidetect v2
 
 > Статус: практический Phase 0 VM-spike закрыт 2026-08-21 через согласованную корректировку scope; наблюдения достаточны для foundation, но supply-chain и live-runtime gates остаются открыты
-> Последняя ревизия: 2026-08-25
-> Текущая контрольная точка: публичная orphan-ветка `v2/public-foundation` содержит проверяемые pnpm/TypeScript/contracts/NestJS/Fastify/Vitest шаги до commit `7202418`; live ShardX adapter не разрешён.
+> Последняя ревизия: 2026-08-26
+> Текущая контрольная точка: публичная orphan-ветка `v2/public-foundation` содержит закоммиченную основу до `03d3e21`; текущая рабочая папка также содержит незакоммиченный учебный diff `HealthModule`/`HealthService` и runtime-контур API. Локальные проверки и запуск API smoke-проверены, но минимальный web-каркас, чистая копия, удалённый CI, выбор локальных каталогов и dependency audit ещё не закрыты; live ShardX adapter не разрешён.
 > Авторитетен для: порядка реализации, phase gates и acceptance scenarios
 
 Архитектура: [architecture.md](architecture.md). Границы продукта: [product-scope.md](product-scope.md).
@@ -54,7 +54,7 @@ Preservation checkpoint необходим, но сам по себе не ра�
 |---|---|---|
 | Documentation baseline | Завершён | Активный контекст отделён от архива |
 | Phase 0 — аудит репозитория и эксперимент ShardX | Практический VM-spike закрыт 21.08.2026 через `GO WITH SCOPE CHANGE`; core lifecycle/process evidence собран, непроверенные сценарии перенесены в дальнейшие gates | Scope adjustment принят; Phase 1 допускается только после отдельного `go` и без live ShardX integration |
-| Phase 1 — foundation | В работе: workspace, lockfile, TypeScript, contracts, Zod, Vitest, NestJS `/health` и D-012 bridge поверх Fastify реализованы; quality tooling остаётся | Чистый workspace воспроизводимо собирается, NestJS API skeleton запускается и проверяется |
+| Phase 1 — foundation | В работе: workspace, lockfile, TypeScript, contracts, Zod, Vitest, NestJS `/health`, D-012 bridge, quality tooling и CI skeleton реализованы. Закрывающие проверки ещё не пройдены | Чистый workspace воспроизводимо устанавливается; запускаются API и web skeleton; dependency audit рассмотрен; команды подтверждены |
 | Phase 2 — persistence/domain | Не начат | Lifecycle invariants обеспечены SQLite и тестами |
 | Phase 3 — lifecycle через fake runtime | Не начат | Concurrency/failure paths проходят deterministic tests |
 | Phase 4 — ShardX adapter | Не начат | Реальный Windows smoke flow работает |
@@ -135,13 +135,22 @@ Exit gate:
 3. [x] Подтвердить прямой Fastify `/health` через `inject()` как временный HTTP baseline.
 4. [x] Перенести только `/health` и bootstrap в NestJS с `FastifyAdapter`, сохранив wire contract — сетевой контракт — и поведение теста.
 5. [x] Выбрать и проверить единый Zod bridge по `D-012`: глобальные pipes/interceptor, `@ZodResponse`, OpenAPI JSON и тесты; не создавать параллельные DTO-схемы.
-6. [ ] Добавить format, lint, build и CI skeleton отдельными проверяемыми шагами.
+6. [x] Добавить format, lint, build и CI skeleton отдельными проверяемыми шагами; локальные проверки проходят, удалённый CI ещё не запускался.
+
+Отметка `[x]` выше подтверждает выполнение отдельного foundation-шага, а не закрытие всей фазы. После аудита 2026-08-26 остаются обязательные закрывающие пробелы:
+
+1. [x] Добавить запускаемый API entrypoint — точку входа приложения — и исправить структуру build так, чтобы emitted JavaScript — скомпилированный JavaScript — запускался с доступными workspace-зависимостями. `apps/api/dist/main.js` запускается через package script, а `GET /health` возвращает `{"status":"ok"}`; проверено 2026-08-26.
+2. [ ] Выбрать и документировать config/application-data directories по D-009.
+3. [ ] Добавить минимальный `apps/web` skeleton без продуктовой логики.
+4. [ ] Выполнить clean checkout/install и подтвердить remote CI после отдельного разрешения на публикацию.
+5. [ ] Разобрать результаты dependency audit — аудита зависимостей: 9 advisories — предупреждений об уязвимостях — высокого/среднего уровня в текущем публичном dependency tree.
 
 Exit gate:
 
 - clean checkout воспроизводимо устанавливается;
 - доступные checks проходят;
 - NestJS API и web skeleton запускаются локально;
+- dependency audit не содержит непринятого высокого/среднего finding либо для него есть зафиксированное решение;
 - команды задокументированы и проверены.
 
 ## Phase 2 — persistence/domain
