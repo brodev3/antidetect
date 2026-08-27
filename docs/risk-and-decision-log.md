@@ -1,7 +1,7 @@
 # Реестр решений, предположений и рисков
 
 > Статус: активный
-> Последняя ревизия: 2026-08-26
+> Последняя ревизия: 2026-08-28
 > Авторитетен для: незакрытых решений, непроверенных гипотез и active risks
 
 ## Правила
@@ -27,10 +27,10 @@
 | D-006 | Process identity marker и закрытие spawn-to-DB crash window | До production adapter | argv/start time/userDataDir markers и orphan test | Открыто |
 | D-007 | Retention runs/events, SSE buffers и `Last-Event-ID` | До SSE persistence | Size/load/reconnect scenarios | Открыто |
 | D-008 | Engine install/update/integrity/rollback policy | До installer | SDK/CDN audit и download failure/race experiments | Открыто |
-| D-009 | Config, database, engine и profile data directories | До foundation | Windows paths, permissions и upgrade analysis | Открыто |
+| D-009 | Config, database, engine и profile data directories | До foundation | Windows paths, permissions и upgrade analysis | Принято: `%LOCALAPPDATA%\\Antidetect` по умолчанию, `ANTIDETECT_HOME` для dev/test override; resolver и идемпотентное создание каталогов реализованы и проверены, startup с временным корнем и fail-closed конфликт «файл вместо каталога» подтверждены, Windows ACL/permissions и upgrade analysis остаются pending |
 | D-010 | Финальные REST routes, status codes и error mapping | До OpenAPI | Стабильные operations и D-004/D-005 | Открыто |
 | D-011 | Какая изолированная среда подтвердит зависящие от оборудования поверхности отпечатка после виртуальной машины | До подтверждения возможностей отпечатка | Отдельная проверка Windows x64 с документированными GPU — графическим процессором, шрифтами и признаками виртуализации | Открыто |
-| D-012 | Единая NestJS-интеграция Zod и OpenAPI: `nestjs-zod` 5.5.0 + `@nestjs/swagger` 11.2.0 | Первый foundation-контракт `/health` | Глобальные `ZodValidationPipe`/`ZodSerializerInterceptor`, `@ZodResponse` из контрактной схемы, `/docs-json`; typecheck и 4 Vitest-теста проходят в `7202418` | Принято и проверено |
+| D-012 | Единая NestJS-интеграция Zod и OpenAPI: `nestjs-zod` 5.5.0 + `@nestjs/swagger@11.4.7` | Первый foundation-контракт `/health` | Глобальные `ZodValidationPipe`/`ZodSerializerInterceptor`, `@ZodResponse` из контрактной схемы, `/docs-json`; typecheck, 16 Vitest-тестов и build проходят | Принято и проверено |
 | D-013 | Структурированные Pino-логи и redaction — удаление секретов — внутри NestJS поверх Fastify | До operational logs и secret-bearing routes | Один согласованный logger, отсутствие двойных логов и tests на скрытие credentials | Открыто |
 
 ## Предположения, требующие проверки
@@ -49,7 +49,7 @@
 | A-010 | Proxy credentials присутствуют или отсутствуют в process argv | Inspect command line без сохранения secret | Проверить |
 | A-011 | Старый `adm-zip` advisory и override актуальны для текущего tree | `@proxyshard/shardx@0.1.11` объявляет `adm-zip ^0.5.16`; структурированные поля advisory относят `<0.6.0` к затронутому диапазону и называют `0.6.0` исправлением, хотя текст карточки противоречиво упоминает `<0.5.18`. Применяется более строгий gate; override и smoke test ещё проверить | Частично подтверждено |
 | A-012 | Fingerprint surfaces реально согласованы и меняются ожидаемо | Reproducible black-box lab | Проверить |
-| A-013 | Node 24, TypeScript 6, NestJS, Fastify, Zod и выбранные framework majors совместимы | 26.08 локально прошли frozen install, format, lint, typecheck, 4 Vitest-теста, пакетный build и запуск `apps/api/dist/main.js`; `GET /health` вернул `{"status":"ok"}`. Clean checkout и remote CI не подтверждены | Частично подтверждено |
+| A-013 | Node 24, TypeScript 6, NestJS, Fastify, Zod и выбранные framework majors совместимы | 28.08 локально прошли frozen install, format, lint, typecheck, 16 Vitest-тестов, пакетный build и запуск `apps/api/dist/main.js`; `GET /health` вернул `{"status":"ok"}`, startup создал пять каталогов, а конфликт «файл вместо корня» не открыл порт. Clean checkout и remote CI не подтверждены | Частично подтверждено |
 | A-014 | Обычный CI работает на Windows/Ubuntu, реальный runtime — Windows x64 | CI matrix и manual smoke workflow | Проверить |
 | A-015 | Результаты установки, процессов, сети и поверхностей отпечатка в виртуальной машине применимы к целевой Windows в одинаковой степени | Для каждого результата указать границу применимости; аппаратно-зависимые выводы проверить отдельно | Проверить |
 
@@ -67,7 +67,7 @@
 | R-008 | Localhost API будет доступен вредоносной странице | High | Loopback, same-origin, strict Host/Origin, D-002 | Активен |
 | R-009 | Download failure/race оставит повреждённую установку, считающуюся ready | High | Install lock, staging, atomic promotion, readiness check | Активен |
 | R-010 | ShardX terms ограничат распространение или commercial use | High | Текущий scope личный и некоммерческий; no bundle/mirror/redistribute, attribution и обязательное повторное согласование до продажи, публичного сервиса или распространения | Принят для текущего scope; открывается при его изменении |
-| R-011 | Уязвимая transitive dependency останется из-за SDK pin или foundation tooling | High | 26.08 `pnpm audit --audit-level moderate` обнаружил 9 advisories: 4 high и 5 moderate. Они приходят через `@nestjs/swagger`/`nestjs-zod` к `path-to-regexp`, `lodash` и `js-yaml`; reachability отдельно не доказана. Нужны совместимое обновление или documented override и regression checks | Активен |
+| R-011 | Уязвимая транзитивная зависимость останется в дереве foundation tooling | High | 26.08 в исходном дереве `pnpm audit` обнаружил 9 advisories — предупреждений безопасности: 4 high и 5 moderate. Проблемная ветка проходила через `@nestjs/swagger` и её транзитивные зависимости; это не означало уязвимость всего дерева и не доказывало reachability — достижимость каждого пути выполнения. `@nestjs/swagger@11.4.7` обновлён с 11.2.0, lockfile пересобран; общий и production-аудит с уровнем moderate теперь чистые, typecheck, 16 тестов и build проходят | Снижен для текущего дерева; будущий audit и обновления должны переоткрыть риск при появлении новых advisory |
 | R-012 | Runs/events/SSE buffers будут расти без ограничений | Medium | D-007, retention cleanup, bounded buffers | Активен |
 | R-013 | Срок вытеснит lifecycle/recovery/security | Medium | Сначала сокращать decorative UI/secondary features | Активен |
 | R-014 | Dirty legacy worktree или `.env` будут повреждены/раскрыты | High | Explicit checkpoint, narrow diffs/staging, never read/commit `.env` | Активен |

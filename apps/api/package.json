@@ -13,7 +13,7 @@
     "@nestjs/common": "^11.2.1",
     "@nestjs/core": "^11.2.1",
     "@nestjs/platform-fastify": "^11.2.1",
-    "@nestjs/swagger": "11.2.0",
+    "@nestjs/swagger": "11.4.7",
     "fastify": "5.12.1",
     "nestjs-zod": "5.5.0",
     "reflect-metadata": "^0.2.2",

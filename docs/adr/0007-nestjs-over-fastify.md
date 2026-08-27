@@ -21,7 +21,7 @@ Phase 1 уже содержит минимальную прямую Fastify-ос
 - Сохранять Vitest тестовой основой. Для NestJS composition использовать `@nestjs/testing`, а HTTP integration tests выполнять через Fastify `inject()`.
 - Не считать NestJS modules системой динамических browser plugins. ShardX, будущий Bablosoft или тестовый Chromium остаются infrastructure adapters одного нашего `BrowserRuntime` contract.
 
-Минимальный NestJS bootstrap, `/health` и Zod/OpenAPI bridge реализованы и проверены в commit `7202418`. Этот ADR не утверждает, что продуктовые modules, persistence или lifecycle уже реализованы.
+Минимальный NestJS bootstrap, `/health` и Zod/OpenAPI bridge реализованы и проверены в commit `5943cf1`. Этот ADR не утверждает, что продуктовые modules, persistence или lifecycle уже реализованы.
 
 ## Причины
 

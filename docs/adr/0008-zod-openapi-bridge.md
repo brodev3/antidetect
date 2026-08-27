@@ -1,7 +1,7 @@
 # ADR-0008: единый Zod bridge для NestJS и OpenAPI
 
 > Статус: Accepted and implemented
-> Дата: 2026-08-25
+> Дата: 2026-08-28
 
 ## Контекст
 
@@ -12,7 +12,7 @@ V2 использует Zod 4 как единственный источник �
 - Использовать `nestjs-zod@5.5.0` для `ZodValidationPipe` — проверки входных данных — и `ZodSerializerInterceptor` — проверки ответов.
 - Описывать response boundary через `@ZodResponse`; схема берётся из `packages/contracts`.
 - Использовать `createZodDto` только как NestJS metadata adapter — адаптер метаданных, а не копию схемы.
-- Использовать `@nestjs/swagger@11.2.0` для OpenAPI document generation — генерации документа.
+- Использовать `@nestjs/swagger@11.4.7` для OpenAPI document generation — генерации документа.
 - Применять `cleanupOpenApiDoc` перед публикацией документа.
 - На foundation-этапе публиковать только JSON OpenAPI на `/docs-json`; Swagger UI отложен, чтобы не добавлять статические Fastify-ассеты до отдельного решения.
 - Удалить прямую зависимость `fastify-type-provider-zod`: после перехода на NestJS validation boundary принадлежит NestJS.
@@ -37,4 +37,4 @@ V2 использует Zod 4 как единственный источник �
 
 ## Evidence
 
-Commit `7202418` содержит bridge, `/docs-json` и тесты. `typecheck` проходит; Vitest: 2 файла, 4 теста.
+Commit `5943cf1` содержит базовую реализацию bridge, `/docs-json` и тесты. 26.08.2026 dependency audit — аудит зависимостей — показал, что исходные advisories были связаны с веткой `@nestjs/swagger`; пакет обновлён с 11.2.0 до 11.4.7 вместе с `pnpm-lock.yaml`. Общий и production-аудит не нашли известных уязвимостей; `pnpm typecheck`, 16 Vitest-тестов и `pnpm build` проходят.

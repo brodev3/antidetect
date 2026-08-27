@@ -1,8 +1,8 @@
 # Текущее состояние репозитория
 
-> Дата фактического аудита: 2026-08-26
-> Последнее обновление решений: 2026-08-26
-> Статус: Phase 1 идёт в публичной orphan-ветке `v2/public-foundation`; NestJS `/health` поверх Fastify, quality tooling, пакетная сборка и запуск API smoke-проверены локально. Web отсутствует, а clean checkout/remote CI, выбор каталогов и устранение уязвимых зависимостей не подтверждены. Live ShardX integration и продуктовые модули не начаты
+> Дата фактического аудита: 2026-08-28
+> Последнее обновление решений: 2026-08-28
+> Статус: Phase 1 идёт в публичной orphan-ветке `v2/public-foundation`; NestJS `/health` поверх Fastify, quality tooling, пакетная сборка, подготовка каталогов до открытия порта и запуск API smoke-проверены локально, политика каталогов D-009 принята. Web, clean checkout и remote CI ещё не подтверждены. Live ShardX integration и продуктовые модули не начаты
 > Авторитетен для: ответа «что уже есть»
 > Не авторитетен для: целевой архитектуры и будущего scope
 
@@ -18,7 +18,13 @@ Antidetect v2 с ShardX пока не реализован.
 
 После отдельного `go` была создана локальная ветка `v2/foundation`, а затем отдельная публичная orphan-ветка — ветка без legacy-истории — `v2/public-foundation` в Git worktree — независимой рабочей папке — `C:\Disk_D\GitRepo\antidetect-v2-public`. Личные рабочие материалы в неё не переносятся.
 
-Цель Phase 1 — создать V2-пакеты `apps/api`, `apps/web` и `packages/contracts` непосредственно в корне новой рабочей папки, а не поверх legacy-каталогов и не внутри `v2/`. В публичной ветке зафиксированы корневой `package.json`, pnpm workspace, lockfile, TypeScript baseline, пакет `@antidetect/contracts` с Zod health schema и tests, а также `@antidetect/api` с NestJS bootstrap, `HealthController`, FastifyAdapter, глобальным Zod bridge, OpenAPI JSON и проверенными `/health`/`/docs-json`. Последний foundation commit — `03d3e21`; текущий незакоммиченный diff выделяет `HealthModule` и `HealthService` как учебный пример module/provider/controller boundary и добавляет executable entrypoint — запускаемую точку входа — `main.ts`. Quality tooling включает Prettier, ESLint, TypeScript build в пакетные `dist/` и package start script; локальные format, lint, typecheck, test, build и `GET /health` smoke проходят. CI skeleton содержит те же проверки, но удалённый запуск ещё не подтверждён. Отсутствуют `apps/web`, база данных, browser runtime и ShardX adapter. Dependency audit обнаружил 9 advisories: 4 high и 5 moderate, требующих отдельного review. Legacy/prototype code исходной папки `antidetect` не переносился в публичную ветку; независимые изменения документации в исходной папке не являются частью v2.
+Цель Phase 1 — создать V2-пакеты `apps/api`, `apps/web` и `packages/contracts` непосредственно в корне новой рабочей папки, а не поверх legacy-каталогов и не внутри `v2/`. В публичной ветке зафиксированы корневой `package.json`, pnpm workspace, lockfile, TypeScript baseline, пакет `@antidetect/contracts` с Zod health schema и tests, а также `@antidetect/api` с NestJS bootstrap, `HealthController`, FastifyAdapter, глобальным Zod bridge, OpenAPI JSON и проверенными `/health`/`/docs-json`. Предыдущий foundation checkpoint перед startup-слоем — `7d15524`; текущая ветка также содержит подготовку каталогов до открытия порта. Политика каталогов D-009 принята: `%LOCALAPPDATA%\\Antidetect` по умолчанию и `ANTIDETECT_HOME` для dev/test override, чистый resolver и `ensureAppDirectories()` реализованы и проверены, а Windows permissions остаются отдельным незакрытым слоем. Quality tooling включает Prettier, ESLint, TypeScript build в пакетные `dist/` и package start script; локальные format, lint, typecheck, 16 тестов и build проходят. CI skeleton содержит те же проверки, но удалённый запуск ещё не подтверждён. Отсутствуют `apps/web`, база данных, browser runtime и ShardX adapter. Dependency audit закрыт обновлением `@nestjs/swagger` до `11.4.7` и транзитивных пакетов: `pnpm audit --audit-level=moderate` и production-аудит не нашли известных уязвимостей. Legacy/prototype code исходной папки `antidetect` не переносился в публичную ветку; независимые изменения документации в исходной папке не являются частью v2.
+
+### Startup и application directories
+
+`apps/api/src/main.ts` является composition root — местом связывания конфигурации и инфраструктуры. После проверки `API_PORT` он вызывает `resolveAppPaths()`, затем `ensureAppDirectories()`, и только после успешной подготовки файловой структуры выполняет `buildApp()` и `app.listen()`. Реальный smoke test — короткая проверка запуска — с временным `ANTIDETECT_HOME` создал каталоги `config`, `data`, `profiles`, `runtime` и `logs`, а `GET /health` вернул `200`.
+
+При указании файла вместо корня `ensureAppDirectories()` завершает процесс с `ENOTDIR`, HTTP-порт не открывается, а исходный файл не заменяется. Это подтверждает fail-closed — остановку при небезопасной ошибке — на текущем startup-слое; гонки процессов, Windows ACL, SQLite и recovery остаются отдельными задачами.
 
 ## Фактическое состояние среды Phase 0
 
@@ -122,7 +128,7 @@ Antidetect v2 с ShardX пока не реализован.
 
 ## Публичная Git-история
 
-Ветка `v2/public-foundation` не имеет родительской истории; её первый root commit `13855ac` — корневой commit без родительской истории — содержит только public V2 files. Текущий закоммиченный кодовый ряд продолжается до `03d3e21`; после него в worktree есть незакоммиченный учебный diff `HealthModule`/`HealthService`, который не следует выдавать за опубликованный результат. Local preservation branches и личные рабочие материалы не являются её предками и не публикуются вместе с v2.
+Ветка `v2/public-foundation` не имеет родительской истории; её первый root commit `13855ac` — корневой commit без родительской истории — содержит только public V2 files. Публичный кодовый ряд развивается отдельными foundation-коммитами; текущий startup-слой подготовки каталогов описан выше и не должен смешиваться с legacy/prototype. Local preservation branches и личные рабочие материалы не являются её предками и не публикуются вместе с v2.
 
 ## Исторический стек discarded prototype
 
@@ -190,4 +196,4 @@ Manifests, lockfile и локальный `node_modules` не подтвержд
 
 Проведены read-only проверки Git, структуры, manifests, lockfile, Prisma schema, core services, API draft и тестов.
 
-Foundation-проверки повторно выполнены 25 августа 2026 года: `format:check`, `lint`, `typecheck`, `test` (2 файла, 4 теста) и `build` прошли успешно. CI workflow закоммичен, но его удалённый запуск ещё не подтверждён, поскольку push не выполнялся. Runtime, browser и database smoke tests не запускались.
+Foundation-проверки повторно выполнены 28 августа 2026 года: `format:check`, `lint`, `typecheck`, `test` (4 файла, 16 тестов) и `build` прошли успешно. Дополнительно проверен реальный запуск `apps/api/dist/main.js` с временным корнем: `GET /health` вернул `200`, пять каталогов созданы, а конфликт «файл вместо корня» остановил процесс без открытия порта. CI workflow закоммичен, но его удалённый запуск ещё не подтверждён, поскольку push не выполнялся. Runtime, browser и database smoke tests не запускались.

@@ -1,7 +1,7 @@
 # Архитектура Antidetect v2
 
 > Статус: принятая целевая архитектура; реализация и поведение внешнего runtime ещё не подтверждены<br>
-> Последняя ревизия: 2026-08-25<br>
+> Последняя ревизия: 2026-08-28<br>
 > Авторитетен для: границ компонентов, lifecycle и обязательных инвариантов<br>
 > Текущее состояние: [current-state.md](current-state.md)
 > Открытые вопросы: [risk-and-decision-log.md](risk-and-decision-log.md)
@@ -166,10 +166,30 @@ Interface выше концептуальный и уточняется посл
 | Источник | Отвечает за | Не доказывает сам по себе |
 |---|---|---|
 | SQLite | Business metadata, durable invariants, run/event history | Что process жив |
-| `app-data/profiles/<uuid>` | Frozen identity и Chromium data | Lifecycle status |
+| `%LOCALAPPDATA%\\Antidetect\\profiles\\<uuid>` | Frozen identity и Chromium data | Lifecycle status |
 | In-memory registry | Живые handles, listeners и runtime control | Состояние после crash API |
 | OS | Существование process и проверяемую identity | Принадлежность по одному PID |
 | ShardX SDK | Launch/stop и low-level metadata | Наши concurrency/recovery guarantees |
+
+## Политика каталогов
+
+**Принятое решение D-009 для Windows x64:** приложение использует единый корень `ANTIDETECT_HOME`. По умолчанию это `%LOCALAPPDATA%\\Antidetect`, а для разработки можно переопределить его на `./data`; тесты используют отдельный временный каталог.
+
+Внутри корня находятся:
+
+- `config/` — настройки приложения без proxy credentials;
+- `data/antidetect.sqlite` — SQLite-метаданные profiles, runs и events;
+- `profiles/<server-generated-uuid>/` — данные Chromium конкретного profile;
+- `runtime/` — engine binaries и runtime cache, не часть Git;
+- `logs/` — операционные логи с обязательной redaction.
+
+`.gitignore` исключает локальные `data/`, `profiles/`, `runtime/` и SQLite-файлы, но ignore-правило не является границей безопасности. Хранение proxy credentials остаётся отдельным открытым решением D-003. Чистый resolver путей и `ensureAppDirectories()` реализованы в `apps/api`; проверка Windows ACL и production-политика прав остаются отдельным следующим слоем.
+
+### Startup boundary
+
+`apps/api/src/main.ts` — composition root — место связывания конфигурации и инфраструктуры. Порядок запуска фиксирован: проверка `API_PORT`, `resolveAppPaths()`, `ensureAppDirectories()`, `buildApp()`, затем `app.listen()`. Поэтому API не открывает HTTP-порт до успешной подготовки application root — корня данных приложения.
+
+Реальный smoke test с временным `ANTIDETECT_HOME` подтвердил создание пяти каталогов и ответ `/health` со статусом `200`. Если корень является файлом, процесс завершается с `ENOTDIR` без fallback — запасного небезопасного пути — и без открытия порта. Это покрывает только startup/filesystem boundary; межпроцессные гонки, ACL, SQLite и recovery остаются отдельными слоями.
 
 Ни поле `running`, ни PID, ни in-memory handle не являются единственным источником истины.
 

@@ -60,3 +60,51 @@ test("does not replace a file where a directory is required", async () => {
     await fs.rm(rootDir, { recursive: true, force: true });
   }
 });
+
+test("keeps separate application roots isolated", async () => {
+  const tempRoot = await fs.mkdtemp(join(tmpdir(), "antidetect-app-isolation-"));
+  const rootA = join(tempRoot, "root-a");
+  const rootB = join(tempRoot, "root-b");
+  const userLocalAppData = join(tempRoot, "user-localappdata-sentinel");
+  const pathsA = resolveAppPaths({
+    env: {
+      ANTIDETECT_HOME: rootA,
+      LOCALAPPDATA: userLocalAppData,
+    },
+  });
+  const pathsB = resolveAppPaths({
+    env: {
+      ANTIDETECT_HOME: rootB,
+      LOCALAPPDATA: userLocalAppData,
+    },
+  });
+
+  try {
+    await ensureAppDirectories(pathsA);
+    await ensureAppDirectories(pathsB);
+
+    const markerA = join(pathsA.profilesDir, "root-a.marker");
+    const markerB = join(pathsB.profilesDir, "root-b.marker");
+
+    await fs.writeFile(markerA, "root-a", "utf8");
+    expect(await fs.readFile(markerA, "utf8")).toBe("root-a");
+    await expect(
+      fs.access(join(pathsB.profilesDir, "root-a.marker")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+
+    await fs.writeFile(markerB, "root-b", "utf8");
+    expect(await fs.readFile(markerB, "utf8")).toBe("root-b");
+    await expect(
+      fs.access(join(pathsA.profilesDir, "root-b.marker")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+
+    expect(pathsA.rootDir).not.toBe(pathsB.rootDir);
+    expect(pathsA.rootDir).not.toContain(userLocalAppData);
+    expect(pathsB.rootDir).not.toContain(userLocalAppData);
+    await expect(fs.access(userLocalAppData)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});

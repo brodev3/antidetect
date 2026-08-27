@@ -1,8 +1,8 @@
 # План разработки Antidetect v2
 
 > Статус: практический Phase 0 VM-spike закрыт 2026-08-21 через согласованную корректировку scope; наблюдения достаточны для foundation, но supply-chain и live-runtime gates остаются открыты
-> Последняя ревизия: 2026-08-26
-> Текущая контрольная точка: публичная orphan-ветка `v2/public-foundation` содержит закоммиченную основу до `03d3e21`; текущая рабочая папка также содержит незакоммиченный учебный diff `HealthModule`/`HealthService` и runtime-контур API. Локальные проверки и запуск API smoke-проверены, но минимальный web-каркас, чистая копия, удалённый CI, выбор локальных каталогов и dependency audit ещё не закрыты; live ShardX adapter не разрешён.
+> Последняя ревизия: 2026-08-28
+> Текущая контрольная точка: публичная orphan-ветка `v2/public-foundation` содержит foundation и startup-слой подготовки каталогов; предыдущий foundation checkpoint — `7d15524`. Локальные проверки и запуск API smoke-проверены, политика каталогов D-009 принята, а dependency audit закрыт обновлением ветки `@nestjs/swagger`. Минимальный web-каркас, чистая копия и удалённый CI ещё не закрыты; live ShardX adapter не разрешён.
 > Авторитетен для: порядка реализации, phase gates и acceptance scenarios
 
 Архитектура: [architecture.md](architecture.md). Границы продукта: [product-scope.md](product-scope.md).
@@ -54,7 +54,7 @@ Preservation checkpoint необходим, но сам по себе не ра�
 |---|---|---|
 | Documentation baseline | Завершён | Активный контекст отделён от архива |
 | Phase 0 — аудит репозитория и эксперимент ShardX | Практический VM-spike закрыт 21.08.2026 через `GO WITH SCOPE CHANGE`; core lifecycle/process evidence собран, непроверенные сценарии перенесены в дальнейшие gates | Scope adjustment принят; Phase 1 допускается только после отдельного `go` и без live ShardX integration |
-| Phase 1 — foundation | В работе: workspace, lockfile, TypeScript, contracts, Zod, Vitest, NestJS `/health`, D-012 bridge, quality tooling и CI skeleton реализованы. Закрывающие проверки ещё не пройдены | Чистый workspace воспроизводимо устанавливается; запускаются API и web skeleton; dependency audit рассмотрен; команды подтверждены |
+| Phase 1 — foundation | В работе: workspace, lockfile, TypeScript, contracts, Zod, Vitest, NestJS `/health`, D-012 bridge, quality tooling и CI skeleton реализованы. Локальные checks и dependency audit подтверждены; web, clean checkout и remote CI остаются незакрытыми | Чистый workspace воспроизводимо устанавливается; запускаются API и web skeleton; dependency audit рассмотрен; команды подтверждены |
 | Phase 2 — persistence/domain | Не начат | Lifecycle invariants обеспечены SQLite и тестами |
 | Phase 3 — lifecycle через fake runtime | Не начат | Concurrency/failure paths проходят deterministic tests |
 | Phase 4 — ShardX adapter | Не начат | Реальный Windows smoke flow работает |
@@ -139,11 +139,11 @@ Exit gate:
 
 Отметка `[x]` выше подтверждает выполнение отдельного foundation-шага, а не закрытие всей фазы. После аудита 2026-08-26 остаются обязательные закрывающие пробелы:
 
-1. [x] Добавить запускаемый API entrypoint — точку входа приложения — и исправить структуру build так, чтобы emitted JavaScript — скомпилированный JavaScript — запускался с доступными workspace-зависимостями. `apps/api/dist/main.js` запускается через package script, а `GET /health` возвращает `{"status":"ok"}`; проверено 2026-08-26.
-2. [ ] Выбрать и документировать config/application-data directories по D-009.
+1. [x] Добавить запускаемый API entrypoint — точку входа приложения — и исправить структуру build так, чтобы emitted JavaScript — скомпилированный JavaScript — запускался с доступными workspace-зависимостями. `apps/api/dist/main.js` запускается через package script; `main.ts` подготавливает каталоги до `buildApp()` и `app.listen()`, а `GET /health` возвращает `{"status":"ok"}`; проверено 2026-08-28.
+2. [x] Выбрать и документировать config/application-data directories по D-009: `%LOCALAPPDATA%\\Antidetect` по умолчанию, `ANTIDETECT_HOME` для dev/test override; чистый resolver и идемпотентное создание каталогов реализованы и покрыты тестами, реальный startup с временным корнем и fail-closed конфликт «файл вместо каталога» проверены, Windows permissions остаются отдельным слоем.
 3. [ ] Добавить минимальный `apps/web` skeleton без продуктовой логики.
 4. [ ] Выполнить clean checkout/install и подтвердить remote CI после отдельного разрешения на публикацию.
-5. [ ] Разобрать результаты dependency audit — аудита зависимостей: 9 advisories — предупреждений об уязвимостях — высокого/среднего уровня в текущем публичном dependency tree.
+5. [x] Разобрать результаты dependency audit — аудита зависимостей: исходные 9 advisories — предупреждений об уязвимостях — высокого/среднего уровня приходили через ветку `@nestjs/swagger`; после обновления до 11.4.7 общий и production-аудит чистые, а regression checks проходят на 16 тестах.
 
 Exit gate:
 
