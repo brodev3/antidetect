@@ -677,6 +677,7 @@ function SortableProfileHeader({
           ? `Sort by ${label}, ${directionLabel}`
           : `Sort by ${label}`
       }
+      aria-pressed={isActive}
       className={
         "profile-list__sort-button" + (isActive ? " is-active" : "")
       }
@@ -1233,6 +1234,7 @@ export function App() {
                           </button>
                           <button
                             aria-label={"Check proxy for " + profile.name}
+                            aria-busy={proxyHealth === "checking"}
                             className="proxy-check-button"
                             disabled={proxyHealth === "checking"}
                             onClick={() => handleProxyCheck(profile)}
@@ -1289,6 +1291,9 @@ export function App() {
 
                     <div className="profile-entry__cell profile-entry__actions">
                       <button
+                        aria-busy={
+                          displayStatus === "starting" || displayStatus === "stopping"
+                        }
                         className={
                           "button profile-action__primary profile-action__primary--" +
                           displayStatus
