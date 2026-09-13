@@ -25,9 +25,7 @@ function getInitialTheme(): AppTheme {
   }
 
   try {
-    return window.localStorage.getItem(THEME_STORAGE_KEY) === "dark"
-      ? "dark"
-      : "light";
+    return window.localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
   } catch {
     return "light";
   }
@@ -285,10 +283,7 @@ function formatStatusDuration(seconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
-function formatStatusMeta(
-  profile: DemoProfile,
-  status: ProfileDisplayStatus,
-): string {
+function formatStatusMeta(profile: DemoProfile, status: ProfileDisplayStatus): string {
   if (profile.statusElapsedSeconds !== undefined) {
     return `${formatStatusDuration(profile.statusElapsedSeconds)} elapsed`;
   }
@@ -357,10 +352,7 @@ function PlatformIcon({ platform }: { platform: string }) {
       <circle className="profile-identity__linux-eye" cx="9.1" cy="4.7" r="1" />
       <circle cx="6.9" cy="4.75" r="0.25" />
       <circle cx="9.1" cy="4.75" r="0.25" />
-      <path
-        className="profile-identity__linux-beak"
-        d="m7.2 5.7.8-.45.8.45-.8.7Z"
-      />
+      <path className="profile-identity__linux-beak" d="m7.2 5.7.8-.45.8.45-.8.7Z" />
     </svg>
   );
 }
@@ -482,11 +474,7 @@ function getActionLabel(status: ProfileDisplayStatus): string {
 function ProfileActionIcon({ status }: { status: ProfileDisplayStatus }) {
   if (status === "running") {
     return (
-      <svg
-        aria-hidden="true"
-        className="profile-action__icon"
-        viewBox="0 0 16 16"
-      >
+      <svg aria-hidden="true" className="profile-action__icon" viewBox="0 0 16 16">
         <rect height="7" rx="0.8" width="7" x="4.5" y="4.5" />
       </svg>
     );
@@ -527,11 +515,7 @@ function ProfileActionIcon({ status }: { status: ProfileDisplayStatus }) {
   }
 
   return (
-    <svg
-      aria-hidden="true"
-      className="profile-action__icon"
-      viewBox="0 0 16 16"
-    >
+    <svg aria-hidden="true" className="profile-action__icon" viewBox="0 0 16 16">
       <path d="m5 3.5 7 4.5-7 4.5Z" />
     </svg>
   );
@@ -562,11 +546,7 @@ function getLastSessionDisplay(lastRunAt: string | null): {
     (currentDay.getTime() - sessionDay.getTime()) / 86_400_000,
   );
   const relativeLabel =
-    daysSinceSession === 0
-      ? "Today"
-      : daysSinceSession === 1
-        ? "Yesterday"
-        : null;
+    daysSinceSession === 0 ? "Today" : daysSinceSession === 1 ? "Yesterday" : null;
   const dateLabel = new Intl.DateTimeFormat("en-US", {
     day: "numeric",
     month: "short",
@@ -586,11 +566,7 @@ function getLastSessionDisplay(lastRunAt: string | null): {
 
 function SessionClockIcon() {
   return (
-    <svg
-      aria-hidden="true"
-      className="profile-session__icon"
-      viewBox="0 0 16 16"
-    >
+    <svg aria-hidden="true" className="profile-session__icon" viewBox="0 0 16 16">
       <circle cx="8" cy="8" r="5.5" />
       <path d="M8 4.75V8l2.35 1.45" />
     </svg>
@@ -607,10 +583,8 @@ function compareProfiles(
   }
 
   if (sort.key === "last-run") {
-    const leftTime =
-      left.lastRunAt === null ? null : Date.parse(left.lastRunAt);
-    const rightTime =
-      right.lastRunAt === null ? null : Date.parse(right.lastRunAt);
+    const leftTime = left.lastRunAt === null ? null : Date.parse(left.lastRunAt);
+    const rightTime = right.lastRunAt === null ? null : Date.parse(right.lastRunAt);
 
     if (leftTime === null || rightTime === null) {
       if (leftTime === rightTime) {
@@ -640,9 +614,7 @@ function getProfileSortValue(
   }
 
   if (sortKey === "tags") {
-    return profile.tags
-      .map((tagId) => demoTagCatalog[tagId].label)
-      .join(", ");
+    return profile.tags.map((tagId) => demoTagCatalog[tagId].label).join(", ");
   }
 
   if (sortKey === "status") {
@@ -672,15 +644,9 @@ function SortableProfileHeader({
 
   return (
     <button
-      aria-label={
-        isActive
-          ? `Sort by ${label}, ${directionLabel}`
-          : `Sort by ${label}`
-      }
+      aria-label={isActive ? `Sort by ${label}, ${directionLabel}` : `Sort by ${label}`}
       aria-pressed={isActive}
-      className={
-        "profile-list__sort-button" + (isActive ? " is-active" : "")
-      }
+      className={"profile-list__sort-button" + (isActive ? " is-active" : "")}
       onClick={() => onSort(sortKey)}
       type="button"
     >
@@ -718,10 +684,8 @@ function SortableProfileHeader({
 export function App() {
   const [theme, setTheme] = React.useState<AppTheme>(getInitialTheme);
   const [searchQuery, setSearchQuery] = React.useState("");
-  const [statusFilter, setStatusFilter] =
-    React.useState<ProfileStatusFilter>("all");
-  const [sortOrder, setSortOrder] =
-    React.useState<ProfileSort>(DEFAULT_PROFILE_SORT);
+  const [statusFilter, setStatusFilter] = React.useState<ProfileStatusFilter>("all");
+  const [sortOrder, setSortOrder] = React.useState<ProfileSort>(DEFAULT_PROFILE_SORT);
   const [proxyHealthOverrides, setProxyHealthOverrides] = React.useState<
     Record<string, ProxyHealth>
   >({});
@@ -789,10 +753,7 @@ export function App() {
     }
 
     const updateScrollState = () => {
-      const maxScrollLeft = Math.max(
-        0,
-        registry.scrollWidth - registry.clientWidth,
-      );
+      const maxScrollLeft = Math.max(0, registry.scrollWidth - registry.clientWidth);
       const nextState = {
         hasLeftOverflow: registry.scrollLeft > 1,
         hasRightOverflow: registry.scrollLeft < maxScrollLeft - 1,
@@ -913,16 +874,12 @@ export function App() {
             <div className="app-header__actions">
               <button
                 aria-label={
-                  theme === "light"
-                    ? "Switch to dark theme"
-                    : "Switch to light theme"
+                  theme === "light" ? "Switch to dark theme" : "Switch to light theme"
                 }
                 aria-pressed={theme === "dark"}
                 className="theme-toggle"
                 onClick={() =>
-                  setTheme((current) =>
-                    current === "light" ? "dark" : "light",
-                  )
+                  setTheme((current) => (current === "light" ? "dark" : "light"))
                 }
                 type="button"
               >
@@ -1095,16 +1052,12 @@ export function App() {
                       {index + 1}
                     </span>
                     <div className="profile-entry__cell profile-entry__profile">
-                      <strong className="profile-entry__name">
-                        {profile.name}
-                      </strong>
+                      <strong className="profile-entry__name">{profile.name}</strong>
                       <span className="profile-entry__id">{profile.id}</span>
                     </div>
 
                     <div
-                      aria-label={
-                        "Tags: " + tags.map((tag) => tag.label).join(", ")
-                      }
+                      aria-label={"Tags: " + tags.map((tag) => tag.label).join(", ")}
                       className="profile-entry__cell profile-entry__tags"
                     >
                       <div
@@ -1175,62 +1128,64 @@ export function App() {
                             title="Open proxy details"
                             type="button"
                           >
-                          {profile.network.country === null ? null : (
-                            <CountryFlag country={profile.network.country} />
-                          )}
-                          <div className="profile-proxy__content">
-                            <div className="profile-proxy__headline">
-                              <strong className="profile-proxy__host">
-                                {profile.network.address}
-                              </strong>
-                            </div>
-                            <div className="profile-proxy__meta">
-                              {profile.network.country === null ? null : (
-                                <span className="profile-proxy__country-code">
-                                  {profile.network.country.code}
-                                </span>
-                              )}
-                              {profile.network.country !== null &&
-                              profile.network.protocol !== null ? (
+                            {profile.network.country === null ? null : (
+                              <CountryFlag country={profile.network.country} />
+                            )}
+                            <div className="profile-proxy__content">
+                              <div className="profile-proxy__headline">
+                                <strong className="profile-proxy__host">
+                                  {profile.network.address}
+                                </strong>
+                              </div>
+                              <div className="profile-proxy__meta">
+                                {profile.network.country === null ? null : (
+                                  <span className="profile-proxy__country-code">
+                                    {profile.network.country.code}
+                                  </span>
+                                )}
+                                {profile.network.country !== null &&
+                                profile.network.protocol !== null ? (
+                                  <span
+                                    aria-hidden="true"
+                                    className="profile-proxy__separator"
+                                  >
+                                    ·
+                                  </span>
+                                ) : null}
+                                {profile.network.protocol === null ? null : (
+                                  <span className="profile-proxy__protocol">
+                                    {profile.network.protocol}
+                                  </span>
+                                )}
+                                {profile.network.protocol !== null ? (
+                                  <span
+                                    aria-hidden="true"
+                                    className="profile-proxy__separator"
+                                  >
+                                    ·
+                                  </span>
+                                ) : null}
                                 <span
-                                  aria-hidden="true"
-                                  className="profile-proxy__separator"
+                                  aria-label={"Proxy " + formatProxyHealth(proxyHealth)}
+                                  className={
+                                    "proxy-health proxy-health--" + proxyHealth
+                                  }
+                                  title={"Proxy: " + formatProxyHealth(proxyHealth)}
+                                  role="img"
                                 >
-                                  ·
+                                  <span
+                                    aria-hidden="true"
+                                    className="proxy-health__dot"
+                                  />
+                                  <span className="proxy-health__label">
+                                    {proxyHealth === "reachable" &&
+                                    profile.network.latencyMs !== null
+                                      ? profile.network.latencyMs + " ms"
+                                      : formatProxyHealth(proxyHealth)}
+                                  </span>
                                 </span>
-                              ) : null}
-                              {profile.network.protocol === null ? null : (
-                                <span className="profile-proxy__protocol">
-                                  {profile.network.protocol}
-                                </span>
-                              )}
-                              {profile.network.protocol !== null ? (
-                                <span
-                                  aria-hidden="true"
-                                  className="profile-proxy__separator"
-                                >
-                                  ·
-                                </span>
-                              ) : null}
-                              <span
-                                aria-label={"Proxy " + formatProxyHealth(proxyHealth)}
-                                className={"proxy-health proxy-health--" + proxyHealth}
-                                title={"Proxy: " + formatProxyHealth(proxyHealth)}
-                                role="img"
-                              >
-                                <span
-                                  aria-hidden="true"
-                                  className="proxy-health__dot"
-                                />
-                                <span className="proxy-health__label">
-                                  {proxyHealth === "reachable" &&
-                                  profile.network.latencyMs !== null
-                                    ? profile.network.latencyMs + " ms"
-                                    : formatProxyHealth(proxyHealth)}
-                                </span>
-                              </span>
+                              </div>
                             </div>
-                          </div>
                           </button>
                           <button
                             aria-label={"Check proxy for " + profile.name}
@@ -1273,7 +1228,9 @@ export function App() {
 
                     <div className="profile-entry__cell profile-entry__session">
                       <div
-                        className={"profile-session profile-session--" + lastSession.tone}
+                        className={
+                          "profile-session profile-session--" + lastSession.tone
+                        }
                       >
                         <span aria-hidden="true" className="profile-session__mark">
                           <SessionClockIcon />
@@ -1313,7 +1270,7 @@ export function App() {
                         type="button"
                       >
                         <svg aria-hidden="true" fill="none" viewBox="0 0 16 16">
-          <path d="M3.25 8h9.5M9.25 4.75 12.5 8l-3.25 3.25" />
+                          <path d="M3.25 8h9.5M9.25 4.75 12.5 8l-3.25 3.25" />
                         </svg>
                       </button>
                     </div>

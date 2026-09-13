@@ -4,13 +4,13 @@
   "type": "module",
   "packageManager": "pnpm@11.16.0",
   "scripts": {
-    "format": "prettier --write \"apps/**/*.ts\" \"packages/**/*.ts\" \"*.{json,mjs}\"",
-    "format:check": "prettier --check \"apps/**/*.ts\" \"packages/**/*.ts\" \"*.{json,mjs}\"",
-    "build": "tsc -p packages/contracts/tsconfig.build.json && tsc -p apps/api/tsconfig.build.json",
+    "format": "prettier --write \"apps/**/*.{ts,tsx,css,html}\" \"apps/web/package.json\" \"packages/**/*.ts\" \"*.{json,mjs}\"",
+    "format:check": "prettier --check \"apps/**/*.{ts,tsx,css,html}\" \"apps/web/package.json\" \"packages/**/*.ts\" \"*.{json,mjs}\"",
+    "build": "tsc -p packages/contracts/tsconfig.build.json && tsc -p apps/api/tsconfig.build.json && corepack pnpm --filter @antidetect/web run build",
     "lint": "eslint apps packages --max-warnings 0",
     "pretest": "tsc -p packages/contracts/tsconfig.build.json",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit -p packages/contracts/tsconfig.json && tsc --noEmit -p apps/api/tsconfig.json"
+    "typecheck": "tsc --noEmit -p packages/contracts/tsconfig.json && tsc --noEmit -p apps/api/tsconfig.json && corepack pnpm --filter @antidetect/web run typecheck"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
