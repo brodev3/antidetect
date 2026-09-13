@@ -1,12 +1,23 @@
 # Текущее состояние репозитория
 
-> Дата фактического аудита: 2026-08-28
-> Последнее обновление решений: 2026-08-28
-> Статус: Phase 1 идёт в публичной orphan-ветке `v2/public-foundation`; NestJS `/health` поверх Fastify, quality tooling, пакетная сборка, подготовка каталогов до открытия порта и запуск API smoke-проверены локально, политика каталогов D-009 принята. Web, clean checkout и remote CI ещё не подтверждены. Live ShardX integration и продуктовые модули не начаты
+> Дата фактического аудита: 2026-09-13
+> Последнее обновление решений: 2026-09-13
+> Статус: локальный Phase 1 gate закрыт в публичной orphan-ветке `v2/public-foundation` на clean checkout `8549bb3`; remote CI ещё не запускался, потому что ветка не опубликована. NestJS `/health` поверх Fastify, quality tooling, пакетная сборка, подготовка каталогов до открытия порта, API/web smoke и dependency audit подтверждены. Live ShardX integration и продуктовые модули не начаты
 > Авторитетен для: ответа «что уже есть»
 > Не авторитетен для: целевой архитектуры и будущего scope
 
-Факты о legacy-коде относятся к аудиту 13 августа. Публичная V2-ветка, её manifests — файлы описания пакетов — lockfile — файл точных зависимостей — и минимальный API-код повторно проверены 25 августа; TypeScript-рефактор остаётся отброшенным прототипом по ADR-0005.
+Текущая разработка относится только к `C:\Disk_D\GitRepo\antidetect-v2-public`, ветке `v2/public-foundation`. Факты о старом коде и виртуальной машине ниже являются датированной историей, а не состоянием работающей V2 или текущей гарантией безопасности основной Windows.
+
+## Снимок публичной V2 на 2026-09-13
+
+- Последний технический коммит текущей основы: `8549bb3` (`chore(repo): normalize text line endings`), после `aabc7c0` (`chore(foundation): wire web checks and patch fastify`). Web skeleton зафиксирован в `81a93de`, а его workspace wiring и security override входят в проверенный clean checkout.
+- Реализованы NestJS/Fastify `/health` и `/docs-json`, Zod-контракты, вычисление и подготовка каталогов до открытия порта, инструменты проверки и сборка. React/Vite web skeleton отображает статическую таблицу demo profiles — демонстрационных профилей — с поиском, фильтром статуса, сортировкой по заголовкам, локальным переключением светлой/тёмной темы, proxy details panel — боковой панелью деталей прокси — и локальной проверкой proxy health. Эти взаимодействия работают только на demo-данных; продуктового API он не вызывает.
+- Web skeleton также задаёт текущую UI-основу: Satoshi, design tokens — токены дизайн-системы — для цветов/радиусов/отступов, единые hover/focus/active/disabled/loading states — состояния элементов, адаптивную сетку таблицы, горизонтальный overflow — прокрутку при нехватке ширины — и закреплённые `Profile`/`Actions`. Это baseline — проверяемая стартовая версия интерфейса, а не готовый продуктовый дизайн или серверное состояние.
+- Clean checkout `8549bb3` на Node.js `24.18.0` и pnpm `11.16.0` прошёл `corepack pnpm install --frozen-lockfile --ignore-scripts`, `format:check`, `lint`, `typecheck`, `test` (4 файла, 16 тестов), `build`, общий `audit` и `audit --prod`. API `/health` и `/docs-json` вернули `200`; web отдал `200` и содержит `#root`/`main.tsx`. Временный `ANTIDETECT_HOME` создал `config`, `data`, `profiles`, `runtime` и `logs`, затем был удалён.
+- Удалённый CI не запускался: ветка не опубликована и upstream отсутствует. CI сейчас содержит только Ubuntu и Node.js `24.19.0`; Windows clean baseline для текущего non-native foundation подтверждён, но Windows CI и проверка будущей нативной SQLite-зависимости остаются отдельными gates.
+- Не реализованы продуктовые операции профилей, SQLite/Kysely, управление процессами, восстановление и настоящий адаптер ShardX. Каркас интерфейса не является готовой интеграцией.
+- Принятое уточнение: [ADR-0009](adr/0009-durable-profile-occupancy.md) запрещает освобождать профиль при живом или неустановленном состоянии браузера. Схема D-014 и её тесты ещё не реализованы. В [плане](development-plan.md) создание/чтение профиля перенесено в Phase 2, API/UI-команды с подменным движком — в Phase 3.
+- Следующий технический шаг: перед Phase 2 закрыть D-015/D-002 и проверить SQLite на Windows. Remote CI остаётся внешним gate до отдельного разрешения на push.
 
 ## Краткий вывод
 
@@ -18,7 +29,9 @@ Antidetect v2 с ShardX пока не реализован.
 
 После отдельного `go` была создана локальная ветка `v2/foundation`, а затем отдельная публичная orphan-ветка — ветка без legacy-истории — `v2/public-foundation` в Git worktree — независимой рабочей папке — `C:\Disk_D\GitRepo\antidetect-v2-public`. Личные рабочие материалы в неё не переносятся.
 
-Цель Phase 1 — создать V2-пакеты `apps/api`, `apps/web` и `packages/contracts` непосредственно в корне новой рабочей папки, а не поверх legacy-каталогов и не внутри `v2/`. В публичной ветке зафиксированы корневой `package.json`, pnpm workspace, lockfile, TypeScript baseline, пакет `@antidetect/contracts` с Zod health schema и tests, а также `@antidetect/api` с NestJS bootstrap, `HealthController`, FastifyAdapter, глобальным Zod bridge, OpenAPI JSON и проверенными `/health`/`/docs-json`. Предыдущий foundation checkpoint перед startup-слоем — `7d15524`; текущая ветка также содержит подготовку каталогов до открытия порта. Политика каталогов D-009 принята: `%LOCALAPPDATA%\\Antidetect` по умолчанию и `ANTIDETECT_HOME` для dev/test override, чистый resolver и `ensureAppDirectories()` реализованы и проверены, а Windows permissions остаются отдельным незакрытым слоем. Quality tooling включает Prettier, ESLint, TypeScript build в пакетные `dist/` и package start script; локальные format, lint, typecheck, 16 тестов и build проходят. CI skeleton содержит те же проверки, но удалённый запуск ещё не подтверждён. Отсутствуют `apps/web`, база данных, browser runtime и ShardX adapter. Dependency audit закрыт обновлением `@nestjs/swagger` до `11.4.7` и транзитивных пакетов: `pnpm audit --audit-level=moderate` и production-аудит не нашли известных уязвимостей. Legacy/prototype code исходной папки `antidetect` не переносился в публичную ветку; независимые изменения документации в исходной папке не являются частью v2.
+Цель Phase 1 — пакеты `apps/api`, `apps/web` и `packages/contracts` в корне новой рабочей папки. Актуальный состав web указан в снимке выше, а baseline зафиксирован в `81a93de`. Политика D-009 задаёт `%LOCALAPPDATA%\\Antidetect` по умолчанию и `ANTIDETECT_HOME` для переопределения; Windows permissions — права доступа — остаются незакрытым слоем.
+
+Исторически аудит зависимостей 26.08 выявил проблемную ветку Swagger. После обновления `@nestjs/swagger` до `11.4.7` и свежего override `fastify: 5.12.1` общий и production-аудит 13.09 не нашли известных уязвимостей.
 
 ### Startup и application directories
 
@@ -26,7 +39,9 @@ Antidetect v2 с ShardX пока не реализован.
 
 При указании файла вместо корня `ensureAppDirectories()` завершает процесс с `ENOTDIR`, HTTP-порт не открывается, а исходный файл не заменяется. Это подтверждает fail-closed — остановку при небезопасной ошибке — на текущем startup-слое; гонки процессов, Windows ACL, SQLite и recovery остаются отдельными задачами.
 
-## Фактическое состояние среды Phase 0
+## История: среда Phase 0 в августе 2026 года
+
+Раздел сохранён как протокол прошлых наблюдений. Поздние изменения ниже заменяют ранние результаты только на дату своего эксперимента; текущее состояние виртуальной машины 05.09 не проверялось. Для разработки V2 достаточно снимка выше; подробные экспериментальные доказательства находятся в [протоколе Phase 0](spikes/phase-0-shardx.md).
 
 Подтверждено 19 августа 2026 года до перезапуска основной системы:
 
@@ -69,7 +84,7 @@ Antidetect v2 с ShardX пока не реализован.
 
 Непроверенные interrupted/concurrent first install, integrity закрытых архивов, reused PID, automatic recovery, рабочий proxy/external IP/DNS/QUIC/WebRTC и fingerprint surfaces перенесены в обязательные phase gates. Цепочка поставки не принята; одноразовое разрешение не является общим разрешением на повторную загрузку, обновление или запуск ShardX. Подробный протокол: [phase-0-shardx.md](spikes/phase-0-shardx.md).
 
-## Классификация слоёв
+## История: классификация исходных слоёв
 
 ### `legacy-confirmed`
 
@@ -93,7 +108,7 @@ Antidetect v2 с ShardX пока не реализован.
 
 Она построена вокруг `playwright-with-fingerprints` и Prisma и не является реализацией целевой v2-архитектуры. Решением от 18 августа 2026 года этот рефактор зафиксирован как **discarded prototype**: v2 создаётся с clean foundation, а код прототипа не переносится по умолчанию. Подробности: [ADR-0005](adr/0005-clean-v2-foundation.md).
 
-Файлы прототипа сохранены в Git-снимке `cebcc68` и исходной ветке `spike/shardx-phase-0-vm`, отмеченной меткой `pre-v2-preservation-2026-08-19`. В V2-worktree они удалены 23.08.2026 после отдельного подтверждения; это удаление пока не зафиксировано коммитом.
+Файлы прототипа сохранены в Git-снимке `cebcc68` и исходной ветке `spike/shardx-phase-0-vm`, отмеченной меткой `pre-v2-preservation-2026-08-19`. Удаление из промежуточной V2-папки относится к истории 23.08.2026. Текущая публичная ветка создана без родительской legacy-истории и не содержит этот прототип; старое замечание о незакоммиченном удалении к ней не применяется.
 
 ### `preserved-drafts`
 
@@ -148,7 +163,7 @@ Antidetect v2 с ShardX пока не реализован.
 
 Manifests, lockfile и локальный `node_modules` не подтверждены как согласованные.
 
-## Что реализовано
+## История: что было реализовано в старом прототипе
 
 Перечисленное ниже существует только в discarded prototype или связанных drafts и не считается стартовой реализацией v2:
 
@@ -162,27 +177,29 @@ Manifests, lockfile и локальный `node_modules` не подтвержд
 - три core tests с mocked DB/runner;
 - незакоммиченный API draft с `/health`, `GET /profiles`, `GET /profiles/:name` и Swagger.
 
-## Что не реализовано
+## Что не реализовано в публичной V2
 
 - интеграция `ShardXRuntime` в код v2; отдельный VM-spike частично выполнен, но не заменяет этот adapter — адаптер внешней среды выполнения;
 - общий `BrowserRuntime` и управляемый `FakeBrowserRuntime`;
 - таблица `browser_runs`;
-- lifecycle state machine и partial unique index active run;
+- машина состояний и ограничение SQLite для всех записей занятости по ADR-0009/D-014;
 - PID/process identity, durable process registry и reconciliation;
 - crash/restart recovery;
-- React UI и SSE;
+- продуктовая интеграция React UI с API и SSE; статический React/Vite-каркас уже существует;
 - Kysely и `better-sqlite3`;
 - решение по хранению proxy credentials;
 - localhost API threat model;
 - обязательный Pino redaction;
 - реальные SQLite integration tests;
-- продуктовые NestJS/Fastify route, SSE и UI tests; существует только foundation-тест `/health`;
+- продуктовые NestJS/Fastify route, SSE и UI tests; текущие 16 тестов покрывают health-контракт, HTTP/OpenAPI и работу с каталогами;
 - полный набор Windows ShardX smoke tests — кратких проверок среды выполнения; есть только ограниченное VM-evidence — доказательство из виртуальной машины;
-- продуктовые модули, UI, persistence и ShardX runtime; foundation format, lint, build и CI skeleton уже существуют.
+- продуктовые модули, сохранение данных и ShardX runtime; основа UI, format, lint, build и CI уже существуют, удалённый CI не подтверждён.
 
-## Критические расхождения с v2
+## История: расхождения старого прототипа с целевой V2
 
-1. Текущий runner использует Bablosoft, а не ShardX.
+Следующие пункты объясняют отказ от прототипа по ADR-0005. Они не описывают код `antidetect-v2-public` и не являются списком текущих дефектов её реализации.
+
+1. Runner старого прототипа использовал Bablosoft, а не ShardX.
 2. Состояние запуска хранится через `Profile.isOpen` и in-memory `Map`; durable double-start protection и recovery отсутствуют.
 3. `LifecycleService` передаёт proxy в `LaunchOptions`, но `Runner.launch()` его не применяет и использует `loadProxy: false`. Успешная проверка proxy не доказывает, что browser запущен через proxy.
 4. Proxy password хранится в SQLite открытым текстом.
@@ -193,6 +210,8 @@ Manifests, lockfile и локальный `node_modules` не подтвержд
 9. Старые ADR фиксировали Playwright/FingerprintSwitcher runner и не являются действующими решениями v2.
 
 ## Статус проверок
+
+Актуальные результаты 05.09 приведены в начале документа. Далее сохранены сведения о предыдущих аудитах; они не означают повторную проверку виртуальной машины, зависимостей или старого кода сегодня.
 
 Проведены read-only проверки Git, структуры, manifests, lockfile, Prisma schema, core services, API draft и тестов.
 

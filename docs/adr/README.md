@@ -1,7 +1,7 @@
 # Реестр архитектурных решений (ADR)
 
 > Статус: активный индекс
-> Последняя ревизия: 2026-08-28
+> Последняя ревизия: 2026-09-13
 
 ADR фиксирует существенное принятое решение: контекст, выбор, альтернативы и последствия. Progress, task list, vendor claims и открытые вопросы в ADR не хранятся.
 
@@ -17,6 +17,7 @@ ADR фиксирует существенное принятое решение:
 | [0006 — Phase 0 Windows 10 residual risk](0006-phase-0-windows-10-residual-risk.md) | Accepted | Допуск Windows 10 без ESU только в одноразовой изолированной Phase 0 |
 | [0007 — NestJS over Fastify](0007-nestjs-over-fastify.md) | Accepted target | NestJS modules/DI поверх Fastify HTTP provider без framework coupling ядра |
 | [0008 — Zod/OpenAPI bridge](0008-zod-openapi-bridge.md) | Accepted and implemented | Единая runtime-проверка Zod и OpenAPI-интеграция в NestJS |
+| [0009 — Durable profile occupancy](0009-durable-profile-occupancy.md) | Принятая цель; не реализовано | Сохраняемая занятость профиля при потере управления браузером; представление в БД остаётся D-014 |
 
 ## Правила
 

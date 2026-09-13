@@ -1,7 +1,7 @@
 # Реестр решений, предположений и рисков
 
 > Статус: активный
-> Последняя ревизия: 2026-08-28
+> Последняя ревизия: 2026-09-13
 > Авторитетен для: незакрытых решений, непроверенных гипотез и active risks
 
 ## Правила
@@ -19,19 +19,24 @@
 
 | ID | Решение | Gate | Необходимое evidence | Статус |
 |---|---|---|---|---|
-| D-001 | Recovery живого process без `ChildProcess`: reattach, controlled termination или quarantine | До reconciliation | Crash/restart Windows spike, CDP rediscovery и safe-control tests | Открыто |
-| D-002 | Защита localhost API: strict loopback/Host/Origin или per-install token/session | До public routes | Threat model DNS rebinding, cross-site localhost и automation access | Открыто |
+| D-001 | Способ безопасного управления живым процессом после потери объекта `ChildProcess` | До настоящего адаптера; сохраняемая занятость определяется раньше по ADR-0009/D-014 | Проверки восстановления и управления на Windows для выбранного способа; подменная модель в Phase 3 не доказывает поведение Windows | Открыто |
+| D-002 | Защита локального API: loopback — только локальный интерфейс, проверка Host/Origin либо локальный токен/сессия | До первого продуктового HTTP-метода в Phase 2 | Модель угроз вредоносной страницы и DNS rebinding — подмены адреса через DNS; отрицательные тесты Host/Origin, строгий API_PORT и запрет внешнего API_HOST | Открыто |
 | D-003 | Proxy credentials at rest: DPAPI, Credential Manager или documented file permissions | До proxy migration | Windows prototype, backup/restore и failure behavior | Открыто |
-| D-004 | `start` semantics: typed conflict/idempotency и bounded sync/async command | До start route | Реальное launch time и concurrency tests | Открыто |
+| D-004 | Семантика Start/Stop: повторные команды, конфликт, Stop во время запуска, ограниченное ожидание и результат неопределённой остановки | До команд и их API/UI-контрактов в Phase 3 | Таблица результатов и переходов, тесты гонок с подменным движком; сроки настоящего запуска проверяются отдельно до реального адаптера | Открыто |
 | D-005 | `interactive`/`automation` и access policy CDP endpoint | До runtime/API contract | Launch с/без CDP и reconnect experiment | Открыто |
 | D-006 | Process identity marker и закрытие spawn-to-DB crash window | До production adapter | argv/start time/userDataDir markers и orphan test | Открыто |
-| D-007 | Retention runs/events, SSE buffers и `Last-Event-ID` | До SSE persistence | Size/load/reconnect scenarios | Открыто |
+| D-007 | Ограничение истории запусков/событий, буферов SSE и повторной доставки по `Last-Event-ID` | До соответствующей сохраняемой истории; доставка — до SSE в Phase 6 | Ограничения размера, сценарии очистки и восстановления через GET после потери событий | Открыто |
 | D-008 | Engine install/update/integrity/rollback policy | До installer | SDK/CDN audit и download failure/race experiments | Открыто |
 | D-009 | Config, database, engine и profile data directories | До foundation | Windows paths, permissions и upgrade analysis | Принято: `%LOCALAPPDATA%\\Antidetect` по умолчанию, `ANTIDETECT_HOME` для dev/test override; resolver и идемпотентное создание каталогов реализованы и проверены, startup с временным корнем и fail-closed конфликт «файл вместо каталога» подтверждены, Windows ACL/permissions и upgrade analysis остаются pending |
-| D-010 | Финальные REST routes, status codes и error mapping | До OpenAPI | Стабильные operations и D-004/D-005 | Открыто |
+| D-010 | HTTP-операции, коды результатов и ошибок, границы списков и состояний UI | Для каждого сценария до его реализации: профили в Phase 2, команды в Phase 3, остальное в Phase 6 | Zod/OpenAPI-контракт и проверки успеха, неверного входа, отсутствия записи, конфликта, ограничения выборки; команды учитывают D-004/D-005 | Открыто; существующий контракт /health не пересматривается |
 | D-011 | Какая изолированная среда подтвердит зависящие от оборудования поверхности отпечатка после виртуальной машины | До подтверждения возможностей отпечатка | Отдельная проверка Windows x64 с документированными GPU — графическим процессором, шрифтами и признаками виртуализации | Открыто |
 | D-012 | Единая NestJS-интеграция Zod и OpenAPI: `nestjs-zod` 5.5.0 + `@nestjs/swagger@11.4.7` | Первый foundation-контракт `/health` | Глобальные `ZodValidationPipe`/`ZodSerializerInterceptor`, `@ZodResponse` из контрактной схемы, `/docs-json`; typecheck, 16 Vitest-тестов и build проходят | Принято и проверено |
 | D-013 | Структурированные Pino-логи и redaction — удаление секретов — внутри NestJS поверх Fastify | До operational logs и secret-bearing routes | Один согласованный logger, отсутствие двойных логов и tests на скрытие credentials | Открыто |
+| D-014 | Представление сохраняемой занятости: блокирующее состояние либо отдельная запись; переходы и конкурентные изменения профиля | До миграции запусков и операций изменения занятого профиля в Phase 2 | Ограничение настоящей временной SQLite; ошибка после создания процесса + неудачная очистка + перезапуск не разрешают новый Start/удаление; параметры не меняются незаметно для запуска | Инвариант принят в ADR-0009; схема и полная таблица переходов открыты |
+| D-015 | Единоличное владение каноническим корнем данных, готовность API и завершение приложения | Владение — до продуктовой записи в Phase 2; готовность и завершение браузеров — до Phase 3 | Два API с одним корнем, независимые корни, сбой владельца и безопасное повторное открытие; новые команды при завершении не принимаются | Открыто |
+| D-016 | Согласование SQLite с каталогами при удалении; миграции, резервная копия и восстановление | Порядок удаления — до удаления профиля; обновление — до следующей миграции; резервное восстановление — до выпуска | Сбой между изменением БД и каталога, повтор операции, подготовленная предыдущая БД и восстановление тестовой копии без пользовательских данных | Открыто |
+
+Для D-014/D-015/D-016 сначала формулируется одно короткое решение с критерием проверки. Они не требуют повторять весь Phase 0 или устанавливать ShardX. Документальный аудит не закрывает перечисленные проверки и не повышает учебный уровень пользователя.
 
 ## Предположения, требующие проверки
 
@@ -49,7 +54,7 @@
 | A-010 | Proxy credentials присутствуют или отсутствуют в process argv | Inspect command line без сохранения secret | Проверить |
 | A-011 | Старый `adm-zip` advisory и override актуальны для текущего tree | `@proxyshard/shardx@0.1.11` объявляет `adm-zip ^0.5.16`; структурированные поля advisory относят `<0.6.0` к затронутому диапазону и называют `0.6.0` исправлением, хотя текст карточки противоречиво упоминает `<0.5.18`. Применяется более строгий gate; override и smoke test ещё проверить | Частично подтверждено |
 | A-012 | Fingerprint surfaces реально согласованы и меняются ожидаемо | Reproducible black-box lab | Проверить |
-| A-013 | Node 24, TypeScript 6, NestJS, Fastify, Zod и выбранные framework majors совместимы | 28.08 локально прошли frozen install, format, lint, typecheck, 16 Vitest-тестов, пакетный build и запуск `apps/api/dist/main.js`; `GET /health` вернул `{"status":"ok"}`, startup создал пять каталогов, а конфликт «файл вместо корня» не открыл порт. Clean checkout и remote CI не подтверждены | Частично подтверждено |
+| A-013 | Node 24, TypeScript 6, NestJS, Fastify, Zod и выбранные framework majors совместимы | Clean checkout `8549bb3` на Node.js `24.18.0` и pnpm `11.16.0`: frozen install, format, lint, typecheck, 16 Vitest-тестов, build, API `/health`/`/docs-json`, web smoke и оба dependency audit прошли. Remote CI не подтверждён | Подтверждено локально; remote CI открыт |
 | A-014 | Обычный CI работает на Windows/Ubuntu, реальный runtime — Windows x64 | CI matrix и manual smoke workflow | Проверить |
 | A-015 | Результаты установки, процессов, сети и поверхностей отпечатка в виртуальной машине применимы к целевой Windows в одинаковой степени | Для каждого результата указать границу применимости; аппаратно-зависимые выводы проверить отдельно | Проверить |
 
@@ -67,7 +72,7 @@
 | R-008 | Localhost API будет доступен вредоносной странице | High | Loopback, same-origin, strict Host/Origin, D-002 | Активен |
 | R-009 | Download failure/race оставит повреждённую установку, считающуюся ready | High | Install lock, staging, atomic promotion, readiness check | Активен |
 | R-010 | ShardX terms ограничат распространение или commercial use | High | Текущий scope личный и некоммерческий; no bundle/mirror/redistribute, attribution и обязательное повторное согласование до продажи, публичного сервиса или распространения | Принят для текущего scope; открывается при его изменении |
-| R-011 | Уязвимая транзитивная зависимость останется в дереве foundation tooling | High | 26.08 в исходном дереве `pnpm audit` обнаружил 9 advisories — предупреждений безопасности: 4 high и 5 moderate. Проблемная ветка проходила через `@nestjs/swagger` и её транзитивные зависимости; это не означало уязвимость всего дерева и не доказывало reachability — достижимость каждого пути выполнения. `@nestjs/swagger@11.4.7` обновлён с 11.2.0, lockfile пересобран; общий и production-аудит с уровнем moderate теперь чистые, typecheck, 16 тестов и build проходят | Снижен для текущего дерева; будущий audit и обновления должны переоткрыть риск при появлении новых advisory |
+| R-011 | Уязвимая транзитивная зависимость останется в дереве foundation tooling | High | 26.08 в исходном дереве `pnpm audit` обнаружил 9 advisories — предупреждений безопасности: 4 high и 5 moderate — через `@nestjs/swagger`. После этого `@nestjs/swagger` обновлён до 11.4.7; свежий audit 13.09 обнаружил две moderate advisory через `fastify@5.11.3`, поэтому добавлен workspace override `fastify: 5.12.1`. Повторные общий и production-аудит чистые, typecheck, 16 тестов и build проходят | Снижен для текущего lockfile; будущий audit и обновления должны переоткрыть риск |
 | R-012 | Runs/events/SSE buffers будут расти без ограничений | Medium | D-007, retention cleanup, bounded buffers | Активен |
 | R-013 | Срок вытеснит lifecycle/recovery/security | Medium | Сначала сокращать decorative UI/secondary features | Активен |
 | R-014 | Dirty legacy worktree или `.env` будут повреждены/раскрыты | High | Explicit checkpoint, narrow diffs/staging, never read/commit `.env` | Активен |
@@ -77,8 +82,9 @@
 | R-018 | Поведение GPU — графического процессора, шрифтов, процессов или отпечатка в виртуальной машине будет ошибочно выдано за поведение физической Windows | Высокий | Маркировка `VM-observed` — наблюдалось в виртуальной машине, ограничения в каждом выводе и отдельная репрезентативная проверка Windows по D-011 | Активен |
 | R-019 | Неподдерживаемая или необновлённая гостевая Windows увеличит риск компрометации среды эксперимента | Высокий | Подтверждена Windows 10 Pro 22H2 `19045.6456` без ESU; по ADR-0006 риск принят только для одноразовой изолированной Phase 0. Отрицательные тесты, отсутствие данных/секретов, защита основной Windows и исходная точка подтверждены; остаются контролируемый исходящий доступ и проверенный источник ShardX | Принят для Phase 0, остаётся активным |
 | R-020 | После включения NAT текущие запреты локальных сетей оставляют доступным весь публичный IPv4; фактический маршрут VM проходит через Xray | Высокий | Применены `WinNAT` `ShardX-Temp`, статический адрес VM и шлюз; базовые private/IPv6 deny сохранены, gateway разрешён точнее и защищён host firewall block. После удаления временного прямого маршрута `1.1.1.1:443=True`, а `192.168.250.1:445=False`. Одноразовое разрешение пользователя использовано для VM-эксперимента ShardX; доменного/IP allowlist и гостевого default-outbound deny нет | Активен: широкий публичный IPv4 разрешён; повторные загрузки, обновления и запуски требуют нового решения |
-| R-021 | Зелёный TypeScript build будет ошибочно принят за запускаемое приложение | High | Добавлены server entrypoint, package/build layout и smoke test из `apps/api/dist`; запуск и `/health` подтверждены. Отдельно остаются clean checkout и remote CI | Снижен, остаётся до воспроизводимости |
-| R-022 | Разные окончания строк и patch-version Node.js дадут шумный diff или несовпадение локального результата с CI | Medium | На Windows включён `core.autocrlf`, `.gitattributes` и `prettier.endOfLine` ещё не заданы; локальный audit использовал Node.js `24.18.0`, CI — `24.19.0`. Зафиксировать policy и проверить clean checkout до закрытия Phase 1 | Активен |
+| R-021 | Зелёный TypeScript build будет ошибочно принят за запускаемое приложение | High | Server entrypoint, package/build layout и API/web smoke из clean checkout `8549bb3` подтверждены; `/health` и `/docs-json` вернули `200`, web отдал `200` с `#root`/`main.tsx` | Снижен; remote CI остаётся отдельным gate |
+| R-022 | Разные окончания строк и patch-version Node.js дадут шумный diff или несовпадение локального результата с CI | Medium | `.gitattributes` задаёт `eol=lf`, clean checkout на Windows прошёл Prettier; локальный Node.js — `24.18.0`, CI — `24.19.0`, что остаётся небольшим различием среды | Снижен; точное совпадение Node patch и Windows CI остаются открыты |
+| R-023 | Потеря управления живым браузером ошибочно освобождает профиль через конечный failed | High | ADR-0009: занятость сохраняется до подтверждённого завершения; схема D-014 и проверки SQLite/перезапуска ещё не реализованы | Противоречие целевой модели исправлено; реализация и доказательства открыты |
 
 ## Принятые v2 решения
 
@@ -87,6 +93,7 @@
 | Local-first single-process control plane как target MVP | [ADR-0003](adr/0003-v2-local-control-plane.md) |
 | NestJS как application framework поверх Fastify HTTP provider | [ADR-0007](adr/0007-nestjs-over-fastify.md) |
 | ShardX boundary и обязательный fake runtime | [ADR-0004](adr/0004-shardx-runtime-boundary.md) |
+| Занятость профиля сохраняется до подтверждённого завершения принадлежащих запуску процессов | [ADR-0009](adr/0009-durable-profile-occupancy.md); принят инвариант, не реализация |
 | ShardX в Phase 0 запускается только в одноразовой виртуальной машине Windows x64; основной компьютер не используется | [Протокол изоляции Phase 0](spikes/phase-0-shardx.md#граница-текущего-разрешения) |
 | Windows 10 Pro без ESU допустима только как принятый остаточный риск одноразовой изолированной Phase 0 | [ADR-0006](adr/0006-phase-0-windows-10-residual-risk.md) |
 

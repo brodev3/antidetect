@@ -1,6 +1,6 @@
 # Antidetect v2
 
-> Статус на 26 августа 2026 года: публичная ветка Phase 1 содержит проверяемую TypeScript-основу, NestJS `/health` поверх Fastify и quality tooling — инструменты качества; ShardX integration и продуктовый код отсутствуют.
+> Статус на 13 сентября 2026 года: локальный Phase 1 gate закрыт на чистом checkout `8549bb3`; публичная ветка содержит проверяемую TypeScript-основу, NestJS `/health` поверх Fastify, quality tooling — инструменты качества — и статический React/Vite web skeleton. ShardX integration и продуктовый код отсутствуют; remote CI ожидает отдельной публикации ветки.
 
 Antidetect v2 — планируемый local-first, API-first orchestrator браузерных профилей на Node.js/TypeScript для Windows x64.
 
@@ -22,9 +22,9 @@ ShardX должен предоставлять сторонний patched Chromi
 
 ## Что находится в репозитории сейчас
 
-Эта ветка содержит только чистую основу Antidetect v2. Уже созданы pnpm workspace, TypeScript baseline, пакет API-контрактов на Zod, минимальный NestJS `/health` поверх Fastify с тестами, format/lint/build-команды и CI skeleton — каркас автоматических проверок. Legacy v1, отброшенный TypeScript-прототип и личные рабочие материалы не входят в её историю.
+Эта ветка содержит только чистую основу Antidetect v2. Уже созданы pnpm workspace, TypeScript baseline, пакет API-контрактов на Zod, минимальный NestJS `/health` поверх Fastify с тестами, статический React/Vite web skeleton — минимальный каркас интерфейса — format/lint/build-команды и CI skeleton — каркас автоматических проверок. Legacy v1, отброшенный TypeScript-прототип и личные рабочие материалы не входят в её историю.
 
-ShardX integration, целевой persistence layer, lifecycle state machine, process recovery, SSE и web UI ещё не реализованы. Точное фактическое состояние зафиксировано в [docs/current-state.md](docs/current-state.md).
+ShardX integration, целевой persistence layer, lifecycle state machine, process recovery, SSE и продуктовая логика web UI ещё не реализованы. Точное фактическое состояние зафиксировано в [docs/current-state.md](docs/current-state.md).
 
 ## Целевой MVP
 
@@ -59,7 +59,7 @@ ShardX integration, целевой persistence layer, lifecycle state machine, p
 
 Проверяемые команды foundation (основы проекта):
 
-Предпосылка: нужен Node.js 24 с включённым Corepack — встроенным механизмом выбора версий package manager. CI ориентирован на Node.js `24.19.0`; локальный аудит выполнялся на `24.18.0`, поэтому точное совпадение среды ещё проверяется отдельным clean checkout.
+Предпосылка: нужен Node.js 24 с включённым Corepack — встроенным механизмом выбора версий package manager. Clean checkout `8549bb3` проверен на Node.js `24.18.0` и pnpm `11.16.0`; CI ориентирован на Node.js `24.19.0`. Политика LF зафиксирована в `.gitattributes`.
 
 ```text
 corepack pnpm install --frozen-lockfile --ignore-scripts
@@ -70,7 +70,7 @@ corepack pnpm test
 corepack pnpm run build
 ```
 
-Эти команды проверяют foundation: форматирование, статический анализ, типы, тесты и компиляцию. `build` собирает contracts и API в пакетные каталоги `packages/contracts/dist` и `apps/api/dist`; после сборки API можно запустить командой `pnpm --filter @antidetect/api start` и проверить `GET http://127.0.0.1:3000/health`. По умолчанию используются `API_HOST=127.0.0.1` и `API_PORT=3000`; пример переменных находится в `.env.example` и сам по себе не загружается автоматически. Это подтверждено локальным smoke-тестом 2026-08-26. Полноценные UI и live ShardX runtime (живой запуск среды выполнения ShardX) будут добавляться отдельными шагами. CI workflow запускает тот же набор проверок на GitHub; удалённый запуск ещё не подтверждён push-операцией. Старую инструкцию `npm install && node index` нельзя считать инструкцией для v2.
+Эти команды проверяют foundation: форматирование, статический анализ, типы, тесты и компиляцию. На clean checkout `8549bb3` все команды прошли; Vitest выполнил 16 тестов, а общий и production `pnpm audit` вернули `No known vulnerabilities found`. `build` собирает contracts, API и web в пакетные каталоги `packages/contracts/dist`, `apps/api/dist` и `apps/web/dist`. API можно запустить командой `pnpm --filter @antidetect/api start` и проверить `GET http://127.0.0.1:3000/health`; web skeleton — командой `pnpm --filter @antidetect/web dev` и открыть `http://127.0.0.1:5173/`. Web пока содержит только статические demo profiles — демонстрационные профили — и не вызывает API. По умолчанию используются `API_HOST=127.0.0.1` и `API_PORT=3000`; пример переменных находится в `.env.example` и сам по себе не загружается автоматически. API и web smoke из clean checkout подтверждены 2026-09-13. Полноценный UI и live ShardX runtime (живой запуск среды выполнения ShardX) будут добавляться отдельными шагами. CI workflow запускает тот же набор проверок на GitHub; удалённый запуск ещё не подтверждён push-операцией. Старую инструкцию `npm install && node index` нельзя считать инструкцией для v2.
 
 ## ShardX и лицензирование
 
