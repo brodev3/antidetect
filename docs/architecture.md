@@ -1,7 +1,7 @@
 # Архитектура Antidetect v2
 
 > Статус: принятая целевая архитектура; реализация и поведение внешнего runtime ещё не подтверждены<br>
-> Последняя ревизия: 2026-09-13<br>
+> Последняя ревизия: 2026-09-15<br>
 > Авторитетен для: границ компонентов, lifecycle и обязательных инвариантов<br>
 > Текущее состояние: [current-state.md](current-state.md)
 > Открытые вопросы: [risk-and-decision-log.md](risk-and-decision-log.md)
@@ -65,28 +65,28 @@ NestJS application modules/controllers
 - Fastify слушает только loopback и раздаёт собранный React SPA с того же origin.
 - Domain/application code не импортирует NestJS decorators или Fastify-specific types; framework используется на API и composition boundary — границе сборки зависимостей.
 - SQLite и application data хранятся локально.
-- Одним каноническим корнем `ANTIDETECT_HOME` управляет только один экземпляр API. Механизм межпроцессного владения корнем и порядок завершения приложения выбираются по D-015 до записи продуктовых данных; блокировка в памяти одного процесса не защищает от второго экземпляра.
+- Одним каноническим корнем `ANTIDETECT_HOME` управляет только один экземпляр API. Базовый механизм межпроцессного владения корнем и порядок bounded shutdown выбраны по D-015/ADR-0010 до записи продуктовых данных; блокировка в памяти одного процесса не защищает от второго экземпляра.
 - Docker, Redis, queues, workers, microservices и desktop shell не входят в MVP.
 
 ## Целевой стек
 
 Базовый набор технологий принят; фактические версии берутся из manifests — описаний пакетов — и lockfile — файла точных зависимостей. Clean checkout `8549bb3` на Node.js `24.18.0` и pnpm `11.16.0` подтвердил frozen install, format, lint, typecheck, 16 Vitest-тестов, build, API/web smoke и общий/production dependency audit. `fastify: 5.12.1` закреплён в pnpm workspace override; policy окончания строк зафиксирована в `.gitattributes`. Удалённый CI остаётся открытым до публикации ветки.
 
-| Область | Принятая цель |
-|---|---|
-| Runtime | Node.js 24 LTS, ESM |
-| Language | TypeScript 6.0.x |
-| Workspace | pnpm 11 workspaces без Nx/Turborepo |
-| Application framework | NestJS, feature modules и providers — зарегистрированные зависимости |
-| HTTP provider | Fastify 5 через `@nestjs/platform-fastify` и `FastifyAdapter` |
-| API contracts | Zod 4 как источник истины; `nestjs-zod` подключает validation/serialization — проверку входа и ответа — без дублирования схем |
-| API docs | OpenAPI через `@nestjs/swagger` и `nestjs-zod`; JSON-документ доступен на `/docs-json`, финальные routes остаются в `D-010` |
-| Logging | структурированные Pino-логи с обязательным redaction; конкретная NestJS-интеграция проверяется до добавления operational logs |
-| Events | native SSE |
-| Persistence | SQLite, `better-sqlite3`, Kysely, explicit SQL migrations |
-| Frontend | React 19, Vite 8, React Router, TanStack Query |
-| Forms/UI | React Hook Form, Zod, Tailwind CSS, shadcn/ui |
-| Tests | Vitest, `@nestjs/testing`, Fastify `inject()`, Playwright UI tests |
+| Область               | Принятая цель                                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Runtime               | Node.js 24 LTS, ESM                                                                                                           |
+| Language              | TypeScript 6.0.x                                                                                                              |
+| Workspace             | pnpm 11 workspaces без Nx/Turborepo                                                                                           |
+| Application framework | NestJS, feature modules и providers — зарегистрированные зависимости                                                          |
+| HTTP provider         | Fastify 5 через `@nestjs/platform-fastify` и `FastifyAdapter`                                                                 |
+| API contracts         | Zod 4 как источник истины; `nestjs-zod` подключает validation/serialization — проверку входа и ответа — без дублирования схем |
+| API docs              | OpenAPI через `@nestjs/swagger` и `nestjs-zod`; JSON-документ доступен на `/docs-json`, финальные routes остаются в `D-010`   |
+| Logging               | структурированные Pino-логи с обязательным redaction; конкретная NestJS-интеграция проверяется до добавления operational logs |
+| Events                | native SSE                                                                                                                    |
+| Persistence           | SQLite, `better-sqlite3`, Kysely, explicit SQL migrations                                                                     |
+| Frontend              | React 19, Vite 8, React Router, TanStack Query                                                                                |
+| Forms/UI              | React Hook Form, Zod, Tailwind CSS, shadcn/ui                                                                                 |
+| Tests                 | Vitest, `@nestjs/testing`, Fastify `inject()`, Playwright UI tests                                                            |
 
 Точная версия ShardX pin принимается только после Phase 0 dependency/API audit. Автоматическое обновление запрещено.
 
@@ -170,13 +170,13 @@ Interface выше концептуальный и уточняется посл
 
 ## Источники истины
 
-| Источник | Отвечает за | Не доказывает сам по себе |
-|---|---|---|
-| SQLite | Business metadata, durable invariants, run/event history | Что process жив |
-| `%LOCALAPPDATA%\\Antidetect\\profiles\\<uuid>` | Frozen identity и Chromium data | Lifecycle status |
-| In-memory registry | Живые handles, listeners и runtime control | Состояние после crash API |
-| OS | Существование process и проверяемую identity | Принадлежность по одному PID |
-| ShardX SDK | Launch/stop и low-level metadata | Наши concurrency/recovery guarantees |
+| Источник                                       | Отвечает за                                              | Не доказывает сам по себе            |
+| ---------------------------------------------- | -------------------------------------------------------- | ------------------------------------ |
+| SQLite                                         | Business metadata, durable invariants, run/event history | Что process жив                      |
+| `%LOCALAPPDATA%\\Antidetect\\profiles\\<uuid>` | Frozen identity и Chromium data                          | Lifecycle status                     |
+| In-memory registry                             | Живые handles, listeners и runtime control               | Состояние после crash API            |
+| OS                                             | Существование process и проверяемую identity             | Принадлежность по одному PID         |
+| ShardX SDK                                     | Launch/stop и low-level metadata                         | Наши concurrency/recovery guarantees |
 
 ## Политика каталогов
 
@@ -190,17 +190,21 @@ Interface выше концептуальный и уточняется посл
 - `runtime/` — engine binaries и runtime cache, не часть Git;
 - `logs/` — операционные логи с обязательной redaction.
 
-`.gitignore` исключает локальные `data/`, `profiles/`, `runtime/` и SQLite-файлы, но ignore-правило не является границей безопасности. Хранение proxy credentials остаётся отдельным открытым решением D-003. Чистый resolver путей и `ensureAppDirectories()` реализованы в `apps/api`; проверка Windows ACL и production-политика прав остаются отдельным следующим слоем.
+`.gitignore` исключает локальные `data/`, `profiles/`, `runtime/` и SQLite-файлы, но ignore-правило не является границей безопасности. Хранение proxy credentials остаётся отдельным открытым решением D-003. Чистый resolver путей, разделённая подготовка каталогов и базовый root guard реализованы в `apps/api`; проверка Windows ACL и production-политика прав остаются отдельным следующим слоем.
 
 ### Startup boundary
 
-`apps/api/src/main.ts` — composition root — место связывания конфигурации и инфраструктуры. Порядок запуска фиксирован: проверка `API_PORT`, `resolveAppPaths()`, `ensureAppDirectories()`, `buildApp()`, затем `app.listen()`. Поэтому API не открывает HTTP-порт до успешной подготовки application root — корня данных приложения.
+`apps/api/src/main.ts` — composition root — место связывания конфигурации и инфраструктуры. Текущий реализованный порядок: проверка `API_PORT`, `resolveAppPaths()`, создание только `rootDir` и `dataDir`, `acquireRootOwnership()` на `data/antidetect.sqlite`, создание Kysely над тем же SQLite handle и проверка `select 1`, затем создание остальных каталогов, `buildApp()` и `app.listen()`. Поэтому второй процесс с тем же корнем не доходит до Kysely-проверки, продуктовых каталогов и HTTP-порта.
 
 Реальный smoke test с временным `ANTIDETECT_HOME` подтвердил создание пяти каталогов и ответ `/health` со статусом `200`. Если корень является файлом, процесс завершается с `ENOTDIR` без fallback — запасного небезопасного пути — и без открытия порта. Это покрывает только startup/filesystem boundary; межпроцессные гонки, ACL, SQLite и recovery остаются отдельными слоями.
 
 Ни поле `running`, ни PID, ни in-memory handle не являются единственным источником истины.
 
-До продуктовых операций нужно определить по D-015 порядок получения владения корнем, восстановления и готовности принимать команды. При завершении API новые команды сначала прекращают приниматься; правило для живых браузеров и сроки завершения выбираются до реализации управления процессами. Это требования к будущему слою, а не текущие гарантии `main.ts`. Строгая проверка всего значения `API_PORT` и запрет внешнего `API_HOST` также ещё не реализованы; они входят в закрытие D-002 до продуктовых HTTP-методов.
+По [ADR-0010](adr/0010-sqlite-exclusive-root-ownership.md) базовый порядок владения корнем реализован. После вычисления путей процесс создаёт только корень и `data`, открывает основное SQLite-соединение, включает `locking_mode=EXCLUSIVE` и короткой проверкой фактически захватывает блокировку. Только владелец создаёт остальные каталоги, а затем вызывает `buildApp()` и `app.listen()`. Проигравший процесс получает `APP_ROOT_IN_USE` и завершается без продуктовых записей и порта.
+
+Основное SQLite-соединение остаётся открытым до конца работы API и закрывается последним ресурсом корня; длительная транзакция для этого не используется. `createAppDatabase()` передаёт Kysely тот же native handle, которым владеет root ownership, поэтому второй SQLite-клиент внутри приложения не создаётся. `verifyAppDatabase()` с `select 1` проверяет доступность соединения, но не заменяет миграции, repository или recovery. При штатном завершении `ApiRuntime` сначала закрывает HTTP-приложение, затем root ownership; повторный `close()` безопасен. Если `app.close()` завершается ошибкой или превышает bounded timeout — ограниченное время ожидания, — root ownership не освобождается: это fail-closed — безопасный отказ с сохранением блокировки, — чтобы второй API не занял корень, пока первый процесс ещё жив. После истечения таймаута процесс завершается с ошибкой, а ОС освобождает файловую блокировку; новый владелец всё равно обязан выполнить recovery до готовности API. Владение корнем не освобождает сохраняемую занятость профилей по ADR-0009. Выполнены unit-, межпроцессные и локальные black-box проверки двух API; profile recovery, платформенное поведение сигналов и Linux CI остаются открытой частью D-015.
+
+При завершении API новые команды сначала прекращают приниматься; правило для живых браузеров и сроки завершения выбираются до реализации управления процессами. Строгая проверка `API_PORT`, запрет внешнего `API_HOST` и базовая request policy уже реализованы; local token/session policy остаётся открытой частью D-002 до расширения продуктовых HTTP-методов.
 
 ## Domain records
 
@@ -363,7 +367,7 @@ SSE не является source of truth, использует typed events, ev
 
 1. API слушает только `127.0.0.1`/`::1`.
 2. UI и API используют один origin; wildcard CORS запрещён.
-3. `Host`/`Origin` проверяются согласно принятой localhost threat model.
+3. API принимает только literal loopback `API_HOST` (`127.0.0.1` или `::1`); каждый запрос обязан иметь ровно один `Host`, совпадающий с configured host/port, а присутствующий `Origin` — точно совпадать с локальным `http://` origin. Это базовая browser-page boundary; защита от произвольных локальных процессов и token/session policy остаются отдельным решением D-002.
 4. Profile IDs генерируются сервером.
 5. Пользовательский ввод не формирует filesystem paths.
 6. Все JSON, filesystem и SDK inputs валидируются на boundary.
@@ -376,7 +380,7 @@ SSE не является source of truth, использует typed events, ev
 13. Diagnostics export проходит отдельную redaction.
 14. CDP metadata выдаётся только по явно принятой access policy.
 
-Открытые security decisions: localhost access (`D-002`), credentials at rest (`D-003`), CDP exposure (`D-005`), engine integrity (`D-008`).
+Открытые security decisions: local token/session policy для localhost access (`D-002`), credentials at rest (`D-003`), CDP exposure (`D-005`), engine integrity (`D-008`).
 
 Известный residual risk: ShardX может передавать proxy credentials через process command line. До проверки и возможного local proxy bridge нельзя заявлять полную защиту от локального пользователя, читающего argv.
 

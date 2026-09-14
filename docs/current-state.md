@@ -1,23 +1,25 @@
 # Текущее состояние репозитория
 
-> Дата фактического аудита: 2026-09-13
-> Последнее обновление решений: 2026-09-13
-> Статус: локальный Phase 1 gate закрыт в публичной orphan-ветке `v2/public-foundation` на clean checkout `8549bb3`; remote CI ещё не запускался, потому что ветка не опубликована. NestJS `/health` поверх Fastify, quality tooling, пакетная сборка, подготовка каталогов до открытия порта, API/web smoke и dependency audit подтверждены. Live ShardX integration и продуктовые модули не начаты
+> Дата фактического аудита: 2026-09-15
+> Последнее обновление решений: 2026-09-15
+> Статус: локальный Phase 1 gate закрыт в публичной orphan-ветке `v2/public-foundation` на clean checkout `8549bb3`; после него в рабочем дереве выполнены startup integration gate, bounded shutdown и базовая localhost request policy, remote CI ещё не запускался, потому что ветка не опубликована. NestJS `/health` поверх Fastify, quality tooling, пакетная сборка, подготовка каталогов до открытия порта, API/web smoke, dependency audit, root ownership и D-002 baseline подтверждены. Live ShardX integration и продуктовые модули не начаты
 > Авторитетен для: ответа «что уже есть»
 > Не авторитетен для: целевой архитектуры и будущего scope
 
 Текущая разработка относится только к `C:\Disk_D\GitRepo\antidetect-v2-public`, ветке `v2/public-foundation`. Факты о старом коде и виртуальной машине ниже являются датированной историей, а не состоянием работающей V2 или текущей гарантией безопасности основной Windows.
 
-## Снимок публичной V2 на 2026-09-13
+## Снимок публичной V2 на 2026-09-15
 
 - Последний технический коммит текущей основы: `8549bb3` (`chore(repo): normalize text line endings`), после `aabc7c0` (`chore(foundation): wire web checks and patch fastify`). Web skeleton зафиксирован в `81a93de`, а его workspace wiring и security override входят в проверенный clean checkout.
 - Реализованы NestJS/Fastify `/health` и `/docs-json`, Zod-контракты, вычисление и подготовка каталогов до открытия порта, инструменты проверки и сборка. React/Vite web skeleton отображает статическую таблицу demo profiles — демонстрационных профилей — с поиском, фильтром статуса, сортировкой по заголовкам, локальным переключением светлой/тёмной темы, proxy details panel — боковой панелью деталей прокси — и локальной проверкой proxy health. Эти взаимодействия работают только на demo-данных; продуктового API он не вызывает.
 - Web skeleton также задаёт текущую UI-основу: Satoshi, design tokens — токены дизайн-системы — для цветов/радиусов/отступов, единые hover/focus/active/disabled/loading states — состояния элементов, адаптивную сетку таблицы, горизонтальный overflow — прокрутку при нехватке ширины — и закреплённые `Profile`/`Actions`. Это baseline — проверяемая стартовая версия интерфейса, а не готовый продуктовый дизайн или серверное состояние.
-- Clean checkout `8549bb3` на Node.js `24.18.0` и pnpm `11.16.0` прошёл `corepack pnpm install --frozen-lockfile --ignore-scripts`, `format:check`, `lint`, `typecheck`, `test` (4 файла, 16 тестов), `build`, общий `audit` и `audit --prod`. API `/health` и `/docs-json` вернули `200`; web отдал `200` и содержит `#root`/`main.tsx`. Временный `ANTIDETECT_HOME` создал `config`, `data`, `profiles`, `runtime` и `logs`, затем был удалён.
+- Clean checkout `8549bb3` на Node.js `24.18.0` и pnpm `11.16.0` прошёл `corepack pnpm install --frozen-lockfile --ignore-scripts`, `format:check`, `lint`, `typecheck`, `test` (4 файла, 16 тестов), `build`, общий `audit` и `audit --prod`. API `/health` и `/docs-json` вернули `200`; web отдал `200` и содержит `#root`/`main.tsx`. Временный `ANTIDETECT_HOME` создал `config`, `data`, `profiles`, `runtime` и `logs`, затем был удалён. После post-gate изменений актуальный рабочий набор также проходит frozen install, format, lint, typecheck, build, 45 тестов и оба audit.
+- После clean baseline в рабочем дереве добавлен startup integration gate: `corepack pnpm run test:integration` собирает contracts/API/web, запускает реальные API-процессы с временными roots, проверяет `/health`, отказ конкурента до порта, отсутствие product directories — продуктовых каталогов — у проигравшего, продолжение работы владельца и повторный запуск после его завершения, а также отклонение внешнего `API_HOST`. Актуальная integration-проверка содержит 3/3 успешных сценария.
+- Базовый D-002 реализован: `API_HOST` принимает только literal `127.0.0.1` или `::1`; request hook отклоняет отсутствующий/чужой/дублированный `Host`, а также несоответствующий `Origin` с `403`. Внешний `API_HOST` отвергается до создания root и открытия порта. Это browser-page boundary — защита от cross-origin страницы; local token/session policy и защита от произвольного локального процесса остаются открыты.
 - Удалённый CI не запускался: ветка не опубликована и upstream отсутствует. CI сейчас содержит только Ubuntu и Node.js `24.19.0`; Windows clean baseline для текущего non-native foundation подтверждён, но Windows CI и проверка будущей нативной SQLite-зависимости остаются отдельными gates.
-- Не реализованы продуктовые операции профилей, SQLite/Kysely, управление процессами, восстановление и настоящий адаптер ShardX. Каркас интерфейса не является готовой интеграцией.
-- Принятое уточнение: [ADR-0009](adr/0009-durable-profile-occupancy.md) запрещает освобождать профиль при живом или неустановленном состоянии браузера. Схема D-014 и её тесты ещё не реализованы. В [плане](development-plan.md) создание/чтение профиля перенесено в Phase 2, API/UI-команды с подменным движком — в Phase 3.
-- Следующий технический шаг: перед Phase 2 закрыть D-015/D-002 и проверить SQLite на Windows. Remote CI остаётся внешним gate до отдельного разрешения на push.
+- Не реализованы продуктовые операции профилей, миграции и репозитории, управление процессами, восстановление и настоящий адаптер ShardX. `better-sqlite3@13.0.3` и `kysely@0.29.5` закреплены в `apps/api`; shared SQLite/Kysely boundary — общий слой подключения Kysely к тому же native handle — реализован и проверен запросом `select 1` и тестом закрытия root connection. Миграции и repository ещё не подключены. Каркас интерфейса не является готовой интеграцией.
+- Принятые уточнения: [ADR-0009](adr/0009-durable-profile-occupancy.md) запрещает освобождать профиль при живом или неустановленном состоянии браузера; [ADR-0010](adr/0010-sqlite-exclusive-root-ownership.md) выбирает и реализует базовую эксклюзивную блокировку основного SQLite-соединения для единоличного владения `ANTIDETECT_HOME`; [ADR-0011](adr/0011-localhost-request-policy.md) фиксирует базовую Host/Origin-политику. Базовый graceful shutdown — штатное завершение — теперь закрывает HTTP-приложение до root lock; profile recovery, local token/session policy, Linux CI, платформенное поведение сигналов и D-014 остаются открыты. В [плане](development-plan.md) создание/чтение профиля перенесено в Phase 2, API/UI-команды с подменным движком — в Phase 3.
+- Следующий технический шаг: определить и проверить recovery barrier — обязательную сверку состояния до готовности API; затем добавить минимальную миграцию и repository профилей. Shared SQLite/Kysely boundary уже подготовлен. Remote CI остаётся внешним gate до отдельного разрешения на push.
 
 ## Краткий вывод
 
@@ -35,9 +37,13 @@ Antidetect v2 с ShardX пока не реализован.
 
 ### Startup и application directories
 
-`apps/api/src/main.ts` является composition root — местом связывания конфигурации и инфраструктуры. После проверки `API_PORT` он вызывает `resolveAppPaths()`, затем `ensureAppDirectories()`, и только после успешной подготовки файловой структуры выполняет `buildApp()` и `app.listen()`. Реальный smoke test — короткая проверка запуска — с временным `ANTIDETECT_HOME` создал каталоги `config`, `data`, `profiles`, `runtime` и `logs`, а `GET /health` вернул `200`.
+`apps/api/src/main.ts` является composition root — местом связывания конфигурации и инфраструктуры. После проверки `API_PORT` он вызывает `resolveAppPaths()`, создаёт только `rootDir` и `dataDir`, получает `acquireRootOwnership()` и только затем создаёт остальные каталоги, выполняет `buildApp()` и `app.listen()`. Startup integration test с двумя реальными процессами подтвердил `/health=200`, отказ второго владельца до порта, продолжение работы первого и повторный захват после его завершения.
 
-При указании файла вместо корня `ensureAppDirectories()` завершает процесс с `ENOTDIR`, HTTP-порт не открывается, а исходный файл не заменяется. Это подтверждает fail-closed — остановку при небезопасной ошибке — на текущем startup-слое; гонки процессов, Windows ACL, SQLite и recovery остаются отдельными задачами.
+При указании файла вместо корня `ensureAppRootDirectories()` завершает процесс с `ENOTDIR`, HTTP-порт не открывается, а исходный файл не заменяется. Это подтверждает fail-closed — остановку при небезопасной ошибке — на текущем startup-слое; Windows ACL, recovery и graceful shutdown остаются отдельными задачами.
+
+ADR-0010 фиксирует и частично реализует порядок запуска: до миграций, продуктовых каталогов и открытия HTTP основное SQLite-соединение получает эксклюзивную блокировку корня и удерживает её до завершения API без длительной транзакции. Базовый guard и локальная startup integration-проверка проходят; `ApiRuntime` освобождает root только после успешного закрытия HTTP-приложения, а при ошибке или таймауте закрытия сохраняет блокировку fail-closed и завершает процесс с ошибкой по bounded shutdown policy — политике ограниченного завершения. После смерти процесса ОС освобождает lock, но profile recovery, платформенное поведение сигналов и Linux CI ещё не приняты.
+
+ADR-0011 фиксирует базовую request policy: API привязан только к literal loopback, а Fastify hook проверяет ровно один `Host` и допустимый same-origin `Origin`. Это снижает риск запросов с вредоносной страницы, но не является authentication — проверкой личности клиента, — поэтому local token/session policy остаётся отдельным решением до расширения продуктовых маршрутов.
 
 ## История: среда Phase 0 в августе 2026 года
 
@@ -147,19 +153,19 @@ Antidetect v2 с ShardX пока не реализован.
 
 ## Исторический стек discarded prototype
 
-| Область | Состояние на момент аудита |
-|---|---|
-| Runtime | локально Node.js `24.18.0` |
-| Package manager | pnpm `11.16.0`, workspaces |
-| TypeScript | `5.9.2` в lockfile |
-| Module format | CommonJS, target ES2020 |
-| API draft | Fastify `4.29.1`, Zod `3.25.76` |
-| Persistence | Prisma `6.19.0`, SQLite |
-| Browser runtime | Playwright `1.55.1` + `playwright-with-fingerprints` `1.6.3` |
-| Tests | Vitest `1.6.1`, несколько mock-based core tests |
-| ShardX | отсутствует |
-| Frontend | отсутствует |
-| CI/lint/format | настроены в foundation; эта строка относится к историческому discarded prototype |
+| Область         | Состояние на момент аудита                                                       |
+| --------------- | -------------------------------------------------------------------------------- |
+| Runtime         | локально Node.js `24.18.0`                                                       |
+| Package manager | pnpm `11.16.0`, workspaces                                                       |
+| TypeScript      | `5.9.2` в lockfile                                                               |
+| Module format   | CommonJS, target ES2020                                                          |
+| API draft       | Fastify `4.29.1`, Zod `3.25.76`                                                  |
+| Persistence     | Prisma `6.19.0`, SQLite                                                          |
+| Browser runtime | Playwright `1.55.1` + `playwright-with-fingerprints` `1.6.3`                     |
+| Tests           | Vitest `1.6.1`, несколько mock-based core tests                                  |
+| ShardX          | отсутствует                                                                      |
+| Frontend        | отсутствует                                                                      |
+| CI/lint/format  | настроены в foundation; эта строка относится к историческому discarded prototype |
 
 Manifests, lockfile и локальный `node_modules` не подтверждены как согласованные.
 
@@ -186,12 +192,12 @@ Manifests, lockfile и локальный `node_modules` не подтвержд
 - PID/process identity, durable process registry и reconciliation;
 - crash/restart recovery;
 - продуктовая интеграция React UI с API и SSE; статический React/Vite-каркас уже существует;
-- Kysely и `better-sqlite3`;
+- миграции, repositories и product operations поверх уже подключённого Kysely/`better-sqlite3`;
 - решение по хранению proxy credentials;
-- localhost API threat model;
+- local token/session policy для localhost API; базовая Host/Origin boundary уже реализована;
 - обязательный Pino redaction;
-- реальные SQLite integration tests;
-- продуктовые NestJS/Fastify route, SSE и UI tests; текущие 16 тестов покрывают health-контракт, HTTP/OpenAPI и работу с каталогами;
+- product schema/migration и persistence integration tests поверх SQLite;
+- продуктовые NestJS/Fastify route, SSE и UI tests; текущий suite из 45 тестов покрывает health-контракт, HTTP/OpenAPI, root ownership, startup policy, lifecycle и Kysely connectivity, но не product routes;
 - полный набор Windows ShardX smoke tests — кратких проверок среды выполнения; есть только ограниченное VM-evidence — доказательство из виртуальной машины;
 - продуктовые модули, сохранение данных и ShardX runtime; основа UI, format, lint, build и CI уже существуют, удалённый CI не подтверждён.
 

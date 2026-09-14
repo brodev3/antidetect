@@ -1,23 +1,54 @@
 import { buildApp } from "./app.js";
+import { formatApiHostForUrl, readApiServerConfig } from "./config/api.server.js";
 import { resolveAppPaths } from "./config/app.paths.js";
-import { ensureAppDirectories } from "./infrastructure/filesystem/app.directories.js";
+import {
+  ensureAppRootDirectories,
+  ensurePostOwnershipDirectories,
+} from "./infrastructure/filesystem/app.directories.js";
+import { createApiRuntime } from "./infrastructure/lifecycle/api.runtime.js";
+import {
+  createAppDatabase,
+  verifyAppDatabase,
+} from "./infrastructure/sqlite/app.database.js";
+import { acquireRootOwnership } from "./infrastructure/sqlite/root.ownership.js";
 
-const host = process.env.API_HOST ?? "127.0.0.1";
-const port = Number.parseInt(process.env.API_PORT ?? "3000", 10);
-
-if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-  throw new Error("API_PORT must be an integer between 1 and 65535");
-}
+const { host, port } = readApiServerConfig();
 
 const appPaths = resolveAppPaths();
-await ensureAppDirectories(appPaths);
-
-const app = await buildApp();
+await ensureAppRootDirectories(appPaths);
+const rootOwnership = acquireRootOwnership(appPaths.databasePath);
+let runtime: ReturnType<typeof createApiRuntime> | undefined;
 
 try {
+  const appDatabase = createAppDatabase(rootOwnership);
+  await verifyAppDatabase(appDatabase);
+  await ensurePostOwnershipDirectories(appPaths);
+  const app = await buildApp({ host, port });
+  runtime = createApiRuntime(app, rootOwnership);
+
   await app.listen({ host, port });
-  console.log(`Antidetect API listening on http://${host}:${port}`);
+  console.log(
+    `Antidetect API listening on http://${formatApiHostForUrl(host)}:${port}`,
+  );
+
+  const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
+    try {
+      await runtime?.close();
+    } catch (error) {
+      console.error(`API shutdown failed after ${signal}`, error);
+      process.exitCode = 1;
+      process.exit(1);
+    }
+  };
+
+  process.once("SIGINT", () => void shutdown("SIGINT"));
+  process.once("SIGTERM", () => void shutdown("SIGTERM"));
 } catch (error) {
-  await app.close();
+  if (runtime === undefined) {
+    rootOwnership.close();
+  } else {
+    await runtime.close();
+  }
+
   throw error;
 }

@@ -1,6 +1,6 @@
 # Antidetect v2
 
-> Статус на 13 сентября 2026 года: локальный Phase 1 gate закрыт на чистом checkout `8549bb3`; публичная ветка содержит проверяемую TypeScript-основу, NestJS `/health` поверх Fastify, quality tooling — инструменты качества — и статический React/Vite web skeleton. ShardX integration и продуктовый код отсутствуют; remote CI ожидает отдельной публикации ветки.
+> Статус на 15 сентября 2026 года: локальный Phase 1 gate закрыт на чистом checkout `8549bb3`; после него локально подтверждены root ownership, bounded shutdown, базовая localhost request policy и shared SQLite/Kysely boundary. Публичная ветка содержит проверяемую TypeScript-основу, NestJS `/health` поверх Fastify, quality tooling — инструменты качества — и статический React/Vite web skeleton. ShardX integration и продуктовый persistence-код отсутствуют; remote CI ожидает отдельной публикации ветки.
 
 Antidetect v2 — планируемый local-first, API-first orchestrator браузерных профилей на Node.js/TypeScript для Windows x64.
 
@@ -53,7 +53,7 @@ ShardX integration, целевой persistence layer, lifecycle state machine, p
 
 ## Запуск и проверки
 
-Корневой pnpm-workspace и TypeScript baseline уже созданы. Тестовая основа (baseline) — Vitest (фреймворк для unit- и integration-тестов, то есть модульных и интеграционных проверок); текущий API-тест использует Fastify `inject()` без запуска сетевого порта. API-контракты используют Zod 4 как источник истины.
+Корневой pnpm-workspace и TypeScript baseline уже созданы. Тестовая основа (baseline) — Vitest (фреймворк для unit- и integration-тестов, то есть модульных и интеграционных проверок); обычные API-тесты используют Fastify `inject()` без запуска сетевого порта, а отдельный `test:integration` запускает собранный API в реальных Node.js-процессах. API-контракты используют Zod 4 как источник истины.
 
 По [ADR-0007](docs/adr/0007-nestjs-over-fastify.md) NestJS уже используется как application framework — каркас приложения — поверх Fastify через `FastifyAdapter` для `/health`. Runtime-проверка Zod подключена через `nestjs-zod`, а OpenAPI — через `@nestjs/swagger` с JSON-документом на `/docs-json`; выбор зафиксирован в [ADR-0008](docs/adr/0008-zod-openapi-bridge.md). Тест сохраняет Zod-контракт, Vitest и Fastify `inject()` без запуска сетевого порта.
 
@@ -68,9 +68,10 @@ corepack pnpm run lint
 corepack pnpm run typecheck
 corepack pnpm test
 corepack pnpm run build
+corepack pnpm run test:integration
 ```
 
-Эти команды проверяют foundation: форматирование, статический анализ, типы, тесты и компиляцию. На clean checkout `8549bb3` все команды прошли; Vitest выполнил 16 тестов, а общий и production `pnpm audit` вернули `No known vulnerabilities found`. `build` собирает contracts, API и web в пакетные каталоги `packages/contracts/dist`, `apps/api/dist` и `apps/web/dist`. API можно запустить командой `pnpm --filter @antidetect/api start` и проверить `GET http://127.0.0.1:3000/health`; web skeleton — командой `pnpm --filter @antidetect/web dev` и открыть `http://127.0.0.1:5173/`. Web пока содержит только статические demo profiles — демонстрационные профили — и не вызывает API. По умолчанию используются `API_HOST=127.0.0.1` и `API_PORT=3000`; пример переменных находится в `.env.example` и сам по себе не загружается автоматически. API и web smoke из clean checkout подтверждены 2026-09-13. Полноценный UI и live ShardX runtime (живой запуск среды выполнения ShardX) будут добавляться отдельными шагами. CI workflow запускает тот же набор проверок на GitHub; удалённый запуск ещё не подтверждён push-операцией. Старую инструкцию `npm install && node index` нельзя считать инструкцией для v2.
+Эти команды проверяют foundation: форматирование, статический анализ, типы, unit-тесты и компиляцию; `test:integration` дополнительно проверяет startup ownership через реальные API-процессы. На clean checkout `8549bb3` базовые команды прошли; после него локальный integration gate также прошёл три раза, а общий и production `pnpm audit` вернули `No known vulnerabilities found`. `build` собирает contracts, API и web в пакетные каталоги `packages/contracts/dist`, `apps/api/dist` и `apps/web/dist`. API можно запустить командой `pnpm --filter @antidetect/api start` и проверить `GET http://127.0.0.1:3000/health`; web skeleton — командой `pnpm --filter @antidetect/web dev` и открыть `http://127.0.0.1:5173/`. Web пока содержит только статические demo profiles — демонстрационные профили — и не вызывает API. По умолчанию используются `API_HOST=127.0.0.1` и `API_PORT=3000`; пример переменных находится в `.env.example` и сам по себе не загружается автоматически. API и web smoke из clean checkout подтверждены 2026-09-13. Полноценный UI и live ShardX runtime (живой запуск среды выполнения ShardX) будут добавляться отдельными шагами. CI workflow запускает базовый набор проверок на GitHub; удалённый запуск ещё не подтверждён push-операцией. Старую инструкцию `npm install && node index` нельзя считать инструкцией для v2.
 
 ## ShardX и лицензирование
 

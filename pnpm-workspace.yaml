@@ -2,5 +2,8 @@ packages:
   - apps/*
   - packages/*
 
+allowBuilds:
+  better-sqlite3: true
+
 overrides:
   fastify: 5.12.1

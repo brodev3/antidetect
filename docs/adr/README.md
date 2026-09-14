@@ -1,7 +1,7 @@
 # Реестр архитектурных решений (ADR)
 
 > Статус: активный индекс
-> Последняя ревизия: 2026-09-13
+> Последняя ревизия: 2026-09-15
 
 ADR фиксирует существенное принятое решение: контекст, выбор, альтернативы и последствия. Progress, task list, vendor claims и открытые вопросы в ADR не хранятся.
 
@@ -18,6 +18,8 @@ ADR фиксирует существенное принятое решение:
 | [0007 — NestJS over Fastify](0007-nestjs-over-fastify.md) | Accepted target | NestJS modules/DI поверх Fastify HTTP provider без framework coupling ядра |
 | [0008 — Zod/OpenAPI bridge](0008-zod-openapi-bridge.md) | Accepted and implemented | Единая runtime-проверка Zod и OpenAPI-интеграция в NestJS |
 | [0009 — Durable profile occupancy](0009-durable-profile-occupancy.md) | Принятая цель; не реализовано | Сохраняемая занятость профиля при потере управления браузером; представление в БД остаётся D-014 |
+| [0010 — SQLite exclusive root ownership](0010-sqlite-exclusive-root-ownership.md) | Принятое решение; shared SQLite/Kysely boundary и локальный startup gate выполнены | Один API владеет всем `ANTIDETECT_HOME` через эксклюзивную блокировку основного SQLite-соединения; миграции, recovery и переносимые проверки остаются открыты |
+| [0011 — Localhost request policy](0011-localhost-request-policy.md) | Принятое базовое решение; local auth открыта | Literal loopback, строгие `Host`/`Origin` и fail-closed startup для внешнего `API_HOST` |
 
 ## Правила
 
