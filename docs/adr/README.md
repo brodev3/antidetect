@@ -17,9 +17,10 @@ ADR фиксирует существенное принятое решение:
 | [0006 — Phase 0 Windows 10 residual risk](0006-phase-0-windows-10-residual-risk.md) | Accepted | Допуск Windows 10 без ESU только в одноразовой изолированной Phase 0 |
 | [0007 — NestJS over Fastify](0007-nestjs-over-fastify.md) | Accepted target | NestJS modules/DI поверх Fastify HTTP provider без framework coupling ядра |
 | [0008 — Zod/OpenAPI bridge](0008-zod-openapi-bridge.md) | Accepted and implemented | Единая runtime-проверка Zod и OpenAPI-интеграция в NestJS |
-| [0009 — Durable profile occupancy](0009-durable-profile-occupancy.md) | Принятая цель; не реализовано | Сохраняемая занятость профиля при потере управления браузером; представление в БД остаётся D-014 |
+| [0009 — Durable profile occupancy](0009-durable-profile-occupancy.md) | Принятая цель; recovery/runtime не реализованы | Сохраняемая занятость профиля при потере управления браузером; схема и базовый lifecycle-сервис приняты в D-014 |
 | [0010 — SQLite exclusive root ownership](0010-sqlite-exclusive-root-ownership.md) | Принятое решение; shared SQLite/Kysely boundary и локальный startup gate выполнены | Один API владеет всем `ANTIDETECT_HOME` через эксклюзивную блокировку основного SQLite-соединения; миграции, recovery и переносимые проверки остаются открыты |
 | [0011 — Localhost request policy](0011-localhost-request-policy.md) | Принятое базовое решение; local auth открыта | Literal loopback, строгие `Host`/`Origin` и fail-closed startup для внешнего `API_HOST` |
+| [0012 — Browser-run occupancy](0012-browser-run-occupancy.md) | Принято для схемы и lifecycle-сервиса Phase 2; recovery не реализован | Отдельная `browser_runs`, блокирующие статусы, transition guard и partial unique index на один активный run профиля |
 
 ## Правила
 

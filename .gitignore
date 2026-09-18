@@ -15,9 +15,9 @@ docs/defense/
 docs/archive/
 docs/ANTIDETECT_V2_DEVELOPMENT_HANDOFF_PROMPT.md
 
-data/
-profiles/
-runtime/
+/data/
+/profiles/
+/runtime/
 *.sqlite
 *.sqlite-*
 *.tgz

@@ -43,6 +43,7 @@ export function acquireRootOwnership(databasePath: string): RootOwnership {
 
   try {
     database = new Database(databasePath, { timeout: 250 });
+    database.pragma("foreign_keys = ON");
     database.pragma("locking_mode = EXCLUSIVE");
     database.exec("BEGIN EXCLUSIVE; COMMIT;");
   } catch (error) {

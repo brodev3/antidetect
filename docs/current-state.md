@@ -1,25 +1,25 @@
 # Текущее состояние репозитория
 
-> Дата фактического аудита: 2026-09-15
-> Последнее обновление решений: 2026-09-15
-> Статус: локальный Phase 1 gate закрыт в публичной orphan-ветке `v2/public-foundation` на clean checkout `8549bb3`; после него в рабочем дереве выполнены startup integration gate, bounded shutdown и базовая localhost request policy, remote CI ещё не запускался, потому что ветка не опубликована. NestJS `/health` поверх Fastify, quality tooling, пакетная сборка, подготовка каталогов до открытия порта, API/web smoke, dependency audit, root ownership и D-002 baseline подтверждены. Live ShardX integration и продуктовые модули не начаты
+> Дата фактического аудита: 2026-09-19
+> Последнее обновление решений: 2026-09-19
+> Статус: локальный Phase 1 gate закрыт в публичной orphan-ветке `v2/public-foundation` на clean checkout `8549bb3`; после него ветка опубликована, а startup integration gate, bounded shutdown, базовая localhost request policy и Phase 2 persistence/lifecycle foundation проверены локально. Remote CI после публикации ещё не подтверждён. NestJS `/health` поверх Fastify, quality tooling, пакетная сборка, подготовка каталогов до открытия порта, API/web smoke, dependency audit, root ownership и D-002 baseline подтверждены. Live ShardX integration и продуктовые HTTP-модули не начаты
 > Авторитетен для: ответа «что уже есть»
 > Не авторитетен для: целевой архитектуры и будущего scope
 
 Текущая разработка относится только к `C:\Disk_D\GitRepo\antidetect-v2-public`, ветке `v2/public-foundation`. Факты о старом коде и виртуальной машине ниже являются датированной историей, а не состоянием работающей V2 или текущей гарантией безопасности основной Windows.
 
-## Снимок публичной V2 на 2026-09-15
+## Снимок публичной V2 на 2026-09-19
 
-- Последний технический коммит текущей основы: `8549bb3` (`chore(repo): normalize text line endings`), после `aabc7c0` (`chore(foundation): wire web checks and patch fastify`). Web skeleton зафиксирован в `81a93de`, а его workspace wiring и security override входят в проверенный clean checkout.
+- Предыдущий опубликованный foundation baseline: `13f460d` (`feat(api): add local startup boundaries`), после `8549bb3` (`chore(repo): normalize text line endings`). Web skeleton зафиксирован в `81a93de`, а его workspace wiring и security override входят в проверенный clean checkout. Текущий Phase 2 блок проверен отдельно и фиксируется после этого аудита.
 - Реализованы NestJS/Fastify `/health` и `/docs-json`, Zod-контракты, вычисление и подготовка каталогов до открытия порта, инструменты проверки и сборка. React/Vite web skeleton отображает статическую таблицу demo profiles — демонстрационных профилей — с поиском, фильтром статуса, сортировкой по заголовкам, локальным переключением светлой/тёмной темы, proxy details panel — боковой панелью деталей прокси — и локальной проверкой proxy health. Эти взаимодействия работают только на demo-данных; продуктового API он не вызывает.
 - Web skeleton также задаёт текущую UI-основу: Satoshi, design tokens — токены дизайн-системы — для цветов/радиусов/отступов, единые hover/focus/active/disabled/loading states — состояния элементов, адаптивную сетку таблицы, горизонтальный overflow — прокрутку при нехватке ширины — и закреплённые `Profile`/`Actions`. Это baseline — проверяемая стартовая версия интерфейса, а не готовый продуктовый дизайн или серверное состояние.
-- Clean checkout `8549bb3` на Node.js `24.18.0` и pnpm `11.16.0` прошёл `corepack pnpm install --frozen-lockfile --ignore-scripts`, `format:check`, `lint`, `typecheck`, `test` (4 файла, 16 тестов), `build`, общий `audit` и `audit --prod`. API `/health` и `/docs-json` вернули `200`; web отдал `200` и содержит `#root`/`main.tsx`. Временный `ANTIDETECT_HOME` создал `config`, `data`, `profiles`, `runtime` и `logs`, затем был удалён. После post-gate изменений актуальный рабочий набор также проходит frozen install, format, lint, typecheck, build, 45 тестов и оба audit.
+- Clean checkout `8549bb3` на Node.js `24.18.0` и pnpm `11.16.0` прошёл `corepack pnpm install --frozen-lockfile --ignore-scripts`, `format:check`, `lint`, `typecheck`, `test` (4 файла, 16 тестов), `build`, общий `audit` и `audit --prod`. После startup-boundary, occupancy и прикладного lifecycle-сервиса актуальный рабочий набор проходит format, lint, typecheck, build, 69 тестов, integration 3/3 и оба audit; frozen install для этого шага отдельно не повторялся. API `/health` и `/docs-json` возвращают `200`; web содержит `#root`/`main.tsx`. Временный `ANTIDETECT_HOME` создаёт `config`, `data`, `profiles`, `runtime` и `logs`, затем удаляется.
 - После clean baseline в рабочем дереве добавлен startup integration gate: `corepack pnpm run test:integration` собирает contracts/API/web, запускает реальные API-процессы с временными roots, проверяет `/health`, отказ конкурента до порта, отсутствие product directories — продуктовых каталогов — у проигравшего, продолжение работы владельца и повторный запуск после его завершения, а также отклонение внешнего `API_HOST`. Актуальная integration-проверка содержит 3/3 успешных сценария.
 - Базовый D-002 реализован: `API_HOST` принимает только literal `127.0.0.1` или `::1`; request hook отклоняет отсутствующий/чужой/дублированный `Host`, а также несоответствующий `Origin` с `403`. Внешний `API_HOST` отвергается до создания root и открытия порта. Это browser-page boundary — защита от cross-origin страницы; local token/session policy и защита от произвольного локального процесса остаются открыты.
-- Удалённый CI не запускался: ветка не опубликована и upstream отсутствует. CI сейчас содержит только Ubuntu и Node.js `24.19.0`; Windows clean baseline для текущего non-native foundation подтверждён, но Windows CI и проверка будущей нативной SQLite-зависимости остаются отдельными gates.
-- Не реализованы продуктовые операции профилей, миграции и репозитории, управление процессами, восстановление и настоящий адаптер ShardX. `better-sqlite3@13.0.3` и `kysely@0.29.5` закреплены в `apps/api`; shared SQLite/Kysely boundary — общий слой подключения Kysely к тому же native handle — реализован и проверен запросом `select 1` и тестом закрытия root connection. Миграции и repository ещё не подключены. Каркас интерфейса не является готовой интеграцией.
-- Принятые уточнения: [ADR-0009](adr/0009-durable-profile-occupancy.md) запрещает освобождать профиль при живом или неустановленном состоянии браузера; [ADR-0010](adr/0010-sqlite-exclusive-root-ownership.md) выбирает и реализует базовую эксклюзивную блокировку основного SQLite-соединения для единоличного владения `ANTIDETECT_HOME`; [ADR-0011](adr/0011-localhost-request-policy.md) фиксирует базовую Host/Origin-политику. Базовый graceful shutdown — штатное завершение — теперь закрывает HTTP-приложение до root lock; profile recovery, local token/session policy, Linux CI, платформенное поведение сигналов и D-014 остаются открыты. В [плане](development-plan.md) создание/чтение профиля перенесено в Phase 2, API/UI-команды с подменным движком — в Phase 3.
-- Следующий технический шаг: определить и проверить recovery barrier — обязательную сверку состояния до готовности API; затем добавить минимальную миграцию и repository профилей. Shared SQLite/Kysely boundary уже подготовлен. Remote CI остаётся внешним gate до отдельного разрешения на push.
+- Ветка `v2/public-foundation` опубликована в origin; удалённый CI после публикации ещё не проверен. CI сейчас содержит только Ubuntu и Node.js `24.19.0`; Windows clean baseline для текущего non-native foundation подтверждён, но Windows CI и проверка будущей нативной SQLite-зависимости остаются отдельными gates.
+- Добавлены минимальные SQL migrations — явные миграции схемы — `schema_migrations`/`profiles`/`browser_runs`, `SqliteProfileRepository` и `SqliteBrowserRunRepository` поверх общего Kysely/native SQLite handle. `BrowserRunService` теперь подключает transition guard — проверку допустимых переходов — и `ProfileOperationMutex` к persistence; старт и переходы статусов проверены на настоящей временной SQLite. Продуктовый API/UI, управление процессами, recovery и настоящий адаптер ShardX ещё не реализованы. Ограничения профилей и occupancy проверяются SQLite-тестами. Каркас интерфейса не является готовой интеграцией.
+- Принятые уточнения: [ADR-0009](adr/0009-durable-profile-occupancy.md) запрещает освобождать профиль при живом или неустановленном состоянии браузера; [ADR-0012](adr/0012-browser-run-occupancy.md) фиксирует отдельные runs и SQLite-инвариант; [ADR-0010](adr/0010-sqlite-exclusive-root-ownership.md) выбирает и реализует базовую эксклюзивную блокировку основного SQLite-соединения для единоличного владения `ANTIDETECT_HOME`; [ADR-0011](adr/0011-localhost-request-policy.md) фиксирует базовую Host/Origin-политику. Базовый graceful shutdown — штатное завершение — теперь закрывает HTTP-приложение до root lock; profile recovery, local token/session policy, Linux CI и платформенное поведение сигналов остаются открыты. В [плане](development-plan.md) создание/чтение профиля перенесено в Phase 2, API/UI-команды с подменным движком — в Phase 3.
+- Следующий технический шаг: определить и реализовать recovery barrier — обязательную сверку состояния до готовности API — поверх подключённого lifecycle/persistence-сервиса. Первый профильный HTTP-контракт, реальный запуск браузера и UI остаются отдельными шагами. Remote CI остаётся внешним gate до отдельной проверки.
 
 ## Краткий вывод
 
@@ -187,19 +187,17 @@ Manifests, lockfile и локальный `node_modules` не подтвержд
 
 - интеграция `ShardXRuntime` в код v2; отдельный VM-spike частично выполнен, но не заменяет этот adapter — адаптер внешней среды выполнения;
 - общий `BrowserRuntime` и управляемый `FakeBrowserRuntime`;
-- таблица `browser_runs`;
-- машина состояний и ограничение SQLite для всех записей занятости по ADR-0009/D-014;
-- PID/process identity, durable process registry и reconciliation;
+- recovery barrier и подтверждение процесса, PID/process identity, durable process registry и reconciliation;
 - crash/restart recovery;
 - продуктовая интеграция React UI с API и SSE; статический React/Vite-каркас уже существует;
-- миграции, repositories и product operations поверх уже подключённого Kysely/`better-sqlite3`;
+- продуктовые HTTP-операции поверх уже подключённых application ports и Kysely/`better-sqlite3`;
 - решение по хранению proxy credentials;
 - local token/session policy для localhost API; базовая Host/Origin boundary уже реализована;
 - обязательный Pino redaction;
-- product schema/migration и persistence integration tests поверх SQLite;
-- продуктовые NestJS/Fastify route, SSE и UI tests; текущий suite из 45 тестов покрывает health-контракт, HTTP/OpenAPI, root ownership, startup policy, lifecycle и Kysely connectivity, но не product routes;
+- API/UI persistence integration tests поверх HTTP-контрактов;
+- продуктовые NestJS/Fastify routes, SSE и UI tests; текущий suite из 69 тестов покрывает health-контракт, HTTP/OpenAPI, root ownership, startup policy, migrations, repositories и базовый lifecycle, но не product routes;
 - полный набор Windows ShardX smoke tests — кратких проверок среды выполнения; есть только ограниченное VM-evidence — доказательство из виртуальной машины;
-- продуктовые модули, сохранение данных и ShardX runtime; основа UI, format, lint, build и CI уже существуют, удалённый CI не подтверждён.
+- продуктовые NestJS-модули/routes, recovery, ShardX runtime и удалённый CI; foundation UI, persistence, format, lint и build уже существуют.
 
 ## История: расхождения старого прототипа с целевой V2
 

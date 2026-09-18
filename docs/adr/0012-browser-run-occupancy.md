@@ -1,0 +1,39 @@
+# ADR-0012: отдельная запись занятости browser run
+
+> Статус: принято для схемы и базового lifecycle-сервиса Phase 2; recovery ещё не реализован
+> Дата: 2026-09-17
+
+## Контекст
+
+`profiles` хранит постоянную конфигурацию профиля, а запуск браузера имеет собственный lifecycle — жизненный цикл — и историю попыток. Если смешать их в одной таблице, невозможно безопасно хранить несколько завершённых запусков одного профиля и отдельно блокировать новый запуск при неопределённом состоянии процесса.
+
+## Решение
+
+1. Каждая попытка запуска получает отдельную запись в `browser_runs` и новый `id`. Запись `profiles` не переиспользуется как run history.
+2. В Phase 2 фиксируется минимальный набор состояний:
+   - блокирующие: `starting`, `running`, `stopping`, `recovery_required`;
+   - конечные: `stopped`, `failed`.
+3. SQLite partial unique index — частичный уникальный индекс — `browser_runs_one_active_per_profile` запрещает больше одной блокирующей записи для одного `profile_id`:
+
+   ```sql
+   UNIQUE(profile_id)
+   WHERE status IN ('starting', 'running', 'stopping', 'recovery_required')
+   ```
+
+4. `browser_runs.profile_id` ссылается на `profiles.id`; `RootOwnership` включает SQLite foreign keys, поэтому запуск для неизвестного профиля отклоняется.
+5. Repository не меняет status произвольно. `BrowserRunService` проверяет допустимые переходы и использует per-profile mutex — блокировку операций одного профиля — до записи через repository. Database constraint остаётся последней защитой от гонки и переживает перезапуск API.
+
+## Failure paths
+
+- Второй активный run одного профиля получает ошибку SQLite и не создаётся.
+- `recovery_required` остаётся блокирующим: отсутствие доверенной process identity не освобождает профиль.
+- Завершённые `stopped` и `failed` записи сохраняют историю и не занимают partial unique index.
+- Неизвестный `profile_id` отклоняется foreign key до появления run.
+
+## Границы решения
+
+Эта миграция не реализует Start/Stop, process identity, recovery reconciliation, API или UI. Она не доказывает, что настоящий Chromium завершён, и не разрешает автоматически переводить `recovery_required` в конечное состояние.
+
+## Проверка
+
+На настоящей временной SQLite проверены: один активный run на профиль, блокировка `recovery_required`, независимые профили, сохранение terminal history и отказ orphan run. Прикладной state guard, `BrowserRunService`, конкурентный Start одного профиля и идемпотентный Stop покрыты unit/integration-тестами. Recovery barrier, process identity и управление реальными процессами остаются открытой частью Phase 2–5.

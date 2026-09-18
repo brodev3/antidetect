@@ -10,6 +10,7 @@ import {
   createAppDatabase,
   verifyAppDatabase,
 } from "./infrastructure/sqlite/app.database.js";
+import { runMigrations } from "./infrastructure/sqlite/migrations/migration.runner.js";
 import { acquireRootOwnership } from "./infrastructure/sqlite/root.ownership.js";
 
 const { host, port } = readApiServerConfig();
@@ -22,6 +23,7 @@ let runtime: ReturnType<typeof createApiRuntime> | undefined;
 try {
   const appDatabase = createAppDatabase(rootOwnership);
   await verifyAppDatabase(appDatabase);
+  await runMigrations(appDatabase);
   await ensurePostOwnershipDirectories(appPaths);
   const app = await buildApp({ host, port });
   runtime = createApiRuntime(app, rootOwnership);

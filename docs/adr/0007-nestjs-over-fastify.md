@@ -6,7 +6,7 @@
 
 ## Контекст
 
-Phase 1 уже содержит минимальную прямую Fastify-основу: `/health`, Zod response contract и Vitest integration test через `inject()`. Product modules, persistence и browser lifecycle ещё не реализованы, поэтому смена API-каркаса сейчас не требует миграции бизнес-логики.
+Phase 1 содержит минимальную NestJS/Fastify-основу: `/health`, Zod response contract и Vitest integration test через `inject()`. В Phase 2 уже добавлены application ports, SQLite persistence и базовый browser-run lifecycle-сервис, но product modules/routes ещё не подключены. Поэтому смена API-каркаса по-прежнему не требует миграции product HTTP-логики.
 
 Целевой control plane будет включать profiles, browser lifecycle, runtime adapters, persistence, events, API и UI boundary. Проект одновременно служит практическим учебным и портфельным примером, поэтому важно показать не только HTTP route, но и осознанное применение modules, dependency injection — внедрения зависимостей — и test overrides — тестовых подмен.
 
@@ -21,7 +21,7 @@ Phase 1 уже содержит минимальную прямую Fastify-ос
 - Сохранять Vitest тестовой основой. Для NestJS composition использовать `@nestjs/testing`, а HTTP integration tests выполнять через Fastify `inject()`.
 - Не считать NestJS modules системой динамических browser plugins. ShardX, будущий Bablosoft или тестовый Chromium остаются infrastructure adapters одного нашего `BrowserRuntime` contract.
 
-Минимальный NestJS bootstrap, `/health` и Zod/OpenAPI bridge реализованы и проверены в commit `5943cf1`. Этот ADR не утверждает, что продуктовые modules, persistence или lifecycle уже реализованы.
+Минимальный NestJS bootstrap, `/health` и Zod/OpenAPI bridge реализованы и проверены в foundation history. Этот ADR не утверждает, что product modules/routes, recovery или реальный browser runtime уже реализованы.
 
 ## Причины
 
