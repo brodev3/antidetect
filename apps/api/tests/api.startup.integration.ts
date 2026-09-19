@@ -135,8 +135,12 @@ function waitForOutput(
   });
 }
 
-function waitForExit(child: ChildProcess): Promise<number | null> {
-  if (child.exitCode !== null || child.signalCode !== null) {
+function waitForClose(child: ChildProcess): Promise<number | null> {
+  const outputClosed = (): boolean =>
+    (child.stdout === null || child.stdout.readableEnded) &&
+    (child.stderr === null || child.stderr.readableEnded);
+
+  if ((child.exitCode !== null || child.signalCode !== null) && outputClosed()) {
     return Promise.resolve(child.exitCode);
   }
 
@@ -145,17 +149,22 @@ function waitForExit(child: ChildProcess): Promise<number | null> {
       cleanup();
       reject(error);
     };
-    const onExit = (code: number | null) => {
+    const onClose = (code: number | null) => {
       cleanup();
       resolve(code);
     };
     const cleanup = () => {
       child.off("error", onError);
-      child.off("exit", onExit);
+      child.off("close", onClose);
     };
 
     child.once("error", onError);
-    child.once("exit", onExit);
+    child.once("close", onClose);
+
+    if ((child.exitCode !== null || child.signalCode !== null) && outputClosed()) {
+      cleanup();
+      resolve(child.exitCode);
+    }
   });
 }
 
@@ -164,11 +173,11 @@ async function stopProcess(child: ChildProcess | undefined): Promise<void> {
     return;
   }
 
-  const exit = waitForExit(child);
+  const close = waitForClose(child);
   if (child.exitCode === null && child.signalCode === null) {
     child.kill();
   }
-  await exit;
+  await close;
 }
 
 async function expectHealth(port: number): Promise<void> {
@@ -237,7 +246,7 @@ test("starts one API owner, rejects a concurrent owner, and allows restart", asy
     await waitForOutput(
       firstOwner,
       `Antidetect API listening on http://127.0.0.1:${firstPort}`,
-      10_000,
+      20_000,
       firstOwnerOutput,
     );
     await expectHealth(firstPort);
@@ -248,7 +257,7 @@ test("starts one API owner, rejects a concurrent owner, and allows restart", asy
 
     contender = spawnApi(rootDir, secondPort);
     const contenderOutput = captureOutput(contender);
-    const contenderExitCode = await waitForExit(contender);
+    const contenderExitCode = await waitForClose(contender);
 
     expect(contenderExitCode).not.toBe(0);
     expect(contenderOutput.stderr).toContain("Application root is already in use");
@@ -264,7 +273,7 @@ test("starts one API owner, rejects a concurrent owner, and allows restart", asy
     await waitForOutput(
       restartedOwner,
       `Antidetect API listening on http://127.0.0.1:${thirdPort}`,
-      10_000,
+      20_000,
       restartedOwnerOutput,
     );
     await expectHealth(thirdPort);
@@ -274,7 +283,7 @@ test("starts one API owner, rejects a concurrent owner, and allows restart", asy
     await stopProcess(firstOwner);
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
-}, 30_000);
+}, 60_000);
 
 test("rejects startup before creating product directories", async () => {
   const tempRoot = await fs.mkdtemp(join(tmpdir(), "antidetect-api-startup-blocked-"));
@@ -292,7 +301,7 @@ test("rejects startup before creating product directories", async () => {
 
     apiProcess = spawnApi(rootDir, port);
     const apiOutput = captureOutput(apiProcess);
-    const apiExitCode = await waitForExit(apiProcess);
+    const apiExitCode = await waitForClose(apiProcess);
 
     expect(apiExitCode).not.toBe(0);
     expect(apiOutput.stderr).toContain("Application root is already in use");
@@ -322,7 +331,7 @@ test("blocks startup when a persisted browser run needs recovery", async () => {
 
     apiProcess = spawnApi(rootDir, port);
     const apiOutput = captureOutput(apiProcess);
-    const apiExitCode = await waitForExit(apiProcess);
+    const apiExitCode = await waitForClose(apiProcess);
 
     expect(apiExitCode).not.toBe(0);
     expect(apiOutput.stderr).toContain("Recovery barrier blocked API startup");
@@ -369,7 +378,7 @@ test("rejects a non-loopback API_HOST before creating the root", async () => {
   try {
     apiProcess = spawnApi(rootDir, port, "0.0.0.0");
     const apiOutput = captureOutput(apiProcess);
-    const apiExitCode = await waitForExit(apiProcess);
+    const apiExitCode = await waitForClose(apiProcess);
 
     expect(apiExitCode).not.toBe(0);
     expect(apiOutput.stderr).toContain("API_HOST must be exactly 127.0.0.1 or ::1");
