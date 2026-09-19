@@ -13,7 +13,11 @@ concurrency:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Check out repository
@@ -45,5 +49,5 @@ jobs:
       - name: Run tests
         run: pnpm run test
 
-      - name: Build packages
-        run: pnpm run build
+      - name: Build packages and test API startup
+        run: pnpm run test:integration
