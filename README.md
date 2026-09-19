@@ -1,6 +1,6 @@
 # Antidetect v2
 
-> Статус на 15 сентября 2026 года: локальный Phase 1 gate закрыт на чистом checkout `8549bb3`; после него локально подтверждены root ownership, bounded shutdown, базовая localhost request policy и shared SQLite/Kysely boundary. Публичная ветка содержит проверяемую TypeScript-основу, NestJS `/health` поверх Fastify, quality tooling — инструменты качества — и статический React/Vite web skeleton. ShardX integration и продуктовый persistence-код отсутствуют; remote CI ожидает отдельной публикации ветки.
+> Статус на 20 сентября 2026 года: локальный Phase 1 gate закрыт; в Phase 2 реализованы SQLite/Kysely-хранилище, единоличное владение корнем, сохраняемая занятость профиля и барьер безопасного запуска API. Публичная ветка опубликована, но текущие коммиты и новая конфигурация CI — автоматических проверок — ещё не отправлены. Продуктовые HTTP-операции и интеграция ShardX отсутствуют.
 
 Antidetect v2 — планируемый local-first, API-first orchestrator браузерных профилей на Node.js/TypeScript для Windows x64.
 

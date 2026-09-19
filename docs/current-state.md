@@ -188,7 +188,7 @@ Manifests, lockfile и локальный `node_modules` не подтвержд
 
 - интеграция `ShardXRuntime` в код v2; отдельный VM-spike частично выполнен, но не заменяет этот adapter — адаптер внешней среды выполнения;
 - общий `BrowserRuntime` и управляемый `FakeBrowserRuntime`;
-- recovery barrier и подтверждение процесса, PID/process identity, durable process registry и reconciliation;
+- process-aware recovery — восстановление с проверкой процесса, PID/process identity, durable process registry и reconciliation; read-only recovery barrier уже реализован;
 - crash/restart recovery;
 - продуктовая интеграция React UI с API и SSE; статический React/Vite-каркас уже существует;
 - продуктовые HTTP-операции поверх уже подключённых application ports и Kysely/`better-sqlite3`;
@@ -196,9 +196,9 @@ Manifests, lockfile и локальный `node_modules` не подтвержд
 - local token/session policy для localhost API; базовая Host/Origin boundary уже реализована;
 - обязательный Pino redaction;
 - API/UI persistence integration tests поверх HTTP-контрактов;
-- продуктовые NestJS/Fastify routes, SSE и UI tests; текущий suite из 71 теста покрывает health-контракт, HTTP/OpenAPI, root ownership, startup policy, migrations, repositories, базовый lifecycle и read-only recovery barrier, но не product routes;
+- продуктовые NestJS/Fastify routes, SSE и UI tests; текущий набор из 79 тестов покрывает health-контракт, HTTP/OpenAPI, root ownership, startup policy, migrations, repositories, базовый lifecycle и read-only recovery barrier, но не product routes;
 - полный набор Windows ShardX smoke tests — кратких проверок среды выполнения; есть только ограниченное VM-evidence — доказательство из виртуальной машины;
-- продуктовые NestJS-модули/routes, recovery, ShardX runtime и удалённый CI; foundation UI, persistence, format, lint и build уже существуют.
+- продуктовые NestJS-модули/routes, process-aware recovery, ShardX runtime и подтверждённый удалённый CI; foundation UI, persistence, read-only recovery barrier, format, lint и build уже существуют.
 
 ## История: расхождения старого прототипа с целевой V2
 
