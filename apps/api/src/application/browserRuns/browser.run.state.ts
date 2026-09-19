@@ -11,12 +11,14 @@ export const browserRunStatuses = [
 
 export type BrowserRunStatus = (typeof browserRunStatuses)[number];
 
-const occupyingStatuses = new Set<BrowserRunStatus>([
+export const browserRunOccupyingStatuses = [
   "starting",
   "running",
   "stopping",
   "recovery_required",
-]);
+] as const satisfies readonly BrowserRunStatus[];
+
+const occupyingStatuses = new Set<BrowserRunStatus>(browserRunOccupyingStatuses);
 
 const terminalStatuses = new Set<BrowserRunStatus>(["stopped", "failed"]);
 

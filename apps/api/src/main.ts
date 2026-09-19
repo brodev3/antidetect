@@ -1,4 +1,5 @@
 import { buildApp } from "./app.js";
+import { BrowserRunRecoveryBarrier } from "./application/browserRuns/browser.run.recovery.js";
 import { formatApiHostForUrl, readApiServerConfig } from "./config/api.server.js";
 import { resolveAppPaths } from "./config/app.paths.js";
 import {
@@ -12,6 +13,7 @@ import {
 } from "./infrastructure/sqlite/app.database.js";
 import { runMigrations } from "./infrastructure/sqlite/migrations/migration.runner.js";
 import { acquireRootOwnership } from "./infrastructure/sqlite/root.ownership.js";
+import { SqliteBrowserRunRepository } from "./infrastructure/sqlite/sqlite.browser.run.repository.js";
 
 const { host, port } = readApiServerConfig();
 
@@ -24,6 +26,10 @@ try {
   const appDatabase = createAppDatabase(rootOwnership);
   await verifyAppDatabase(appDatabase);
   await runMigrations(appDatabase);
+  const recoveryBarrier = new BrowserRunRecoveryBarrier(
+    new SqliteBrowserRunRepository(appDatabase),
+  );
+  recoveryBarrier.assertReady(await recoveryBarrier.inspect());
   await ensurePostOwnershipDirectories(appPaths);
   const app = await buildApp({ host, port });
   runtime = createApiRuntime(app, rootOwnership);

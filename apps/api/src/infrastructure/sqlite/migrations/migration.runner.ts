@@ -14,6 +14,15 @@ const migrations: readonly Migration[] = [
   createBrowserRunsMigration,
 ];
 
+export class IncompatibleDatabaseSchemaError extends Error {
+  readonly code = "INCOMPATIBLE_DATABASE_SCHEMA" as const;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "IncompatibleDatabaseSchemaError";
+  }
+}
+
 export async function runMigrations(database: AppDatabase): Promise<void> {
   await sql`
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -28,16 +37,38 @@ export async function runMigrations(database: AppDatabase): Promise<void> {
     .select(["version", "name"])
     .execute();
   const appliedVersions = new Map(appliedRows.map((row) => [row.version, row.name]));
+  const supportedVersions = new Map(
+    migrations.map((migration) => [migration.version, migration.name]),
+  );
+
+  // Validate the entire history before applying any pending migration.
+  for (const row of appliedRows) {
+    const expectedName = supportedVersions.get(row.version);
+    if (expectedName === undefined) {
+      throw new IncompatibleDatabaseSchemaError(
+        `Database migration version ${row.version} is not supported by this application`,
+      );
+    }
+    if (row.name !== expectedName) {
+      throw new IncompatibleDatabaseSchemaError(
+        `Database migration version ${row.version} does not match the expected migration`,
+      );
+    }
+  }
+
+  let hasPendingMigration = false;
+  for (const migration of migrations) {
+    if (!appliedVersions.has(migration.version)) {
+      hasPendingMigration = true;
+    } else if (hasPendingMigration) {
+      throw new IncompatibleDatabaseSchemaError(
+        `Database migration history is incomplete before version ${migration.version}`,
+      );
+    }
+  }
 
   for (const migration of migrations) {
-    const appliedName = appliedVersions.get(migration.version);
-    if (appliedName !== undefined) {
-      if (appliedName !== migration.name) {
-        throw new Error(
-          `Migration version ${migration.version} is registered as ${appliedName}, expected ${migration.name}`,
-        );
-      }
-
+    if (appliedVersions.has(migration.version)) {
       continue;
     }
 

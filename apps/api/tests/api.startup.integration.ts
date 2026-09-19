@@ -5,6 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
+import { resolveAppPaths } from "../src/config/app.paths.ts";
+import { ensureAppRootDirectories } from "../src/infrastructure/filesystem/app.directories.ts";
+import { createAppDatabase } from "../src/infrastructure/sqlite/app.database.ts";
+import { runMigrations } from "../src/infrastructure/sqlite/migrations/migration.runner.ts";
+import { acquireRootOwnership } from "../src/infrastructure/sqlite/root.ownership.ts";
+import { SqliteBrowserRunRepository } from "../src/infrastructure/sqlite/sqlite.browser.run.repository.ts";
+import { SqliteProfileRepository } from "../src/infrastructure/sqlite/sqlite.profile.repository.ts";
 
 const apiEntryPoint = fileURLToPath(new URL("../dist/main.js", import.meta.url));
 const sqliteOwnerFixture = fileURLToPath(
@@ -179,6 +186,41 @@ async function expectPortClosed(port: number): Promise<void> {
   ).rejects.toThrow();
 }
 
+async function seedBlockingRun(rootDir: string): Promise<void> {
+  const paths = resolveAppPaths({ env: { ANTIDETECT_HOME: rootDir } });
+  await ensureAppRootDirectories(paths);
+
+  const owner = acquireRootOwnership(paths.databasePath);
+  const database = createAppDatabase(owner);
+
+  try {
+    await runMigrations(database);
+    const profiles = new SqliteProfileRepository(database);
+    await profiles.create({
+      id: "profile-recovery",
+      displayName: "Recovery profile",
+      identityRef: "identity-recovery",
+      createdAt: "2026-09-19T10:00:00.000Z",
+      updatedAt: "2026-09-19T10:00:00.000Z",
+    });
+    const runs = new SqliteBrowserRunRepository(database);
+    await runs.create({
+      id: "run-recovery",
+      profileId: "profile-recovery",
+      status: "starting",
+      processPid: 424242,
+      processIdentity: "PRIVATE_PROCESS_METADATA_TEST_MARKER",
+      failureCode: "PRIVATE_FAILURE_DETAILS_TEST_MARKER",
+      createdAt: "2026-09-19T10:00:00.000Z",
+      updatedAt: "2026-09-19T10:00:00.000Z",
+      endedAt: null,
+    });
+  } finally {
+    await database.destroy();
+    owner.close();
+  }
+}
+
 test("starts one API owner, rejects a concurrent owner, and allows restart", async () => {
   const tempRoot = await fs.mkdtemp(join(tmpdir(), "antidetect-api-startup-"));
   const rootDir = join(tempRoot, "app");
@@ -265,6 +307,55 @@ test("rejects startup before creating product directories", async () => {
   } finally {
     await stopProcess(apiProcess);
     await stopProcess(sqliteOwner);
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+}, 20_000);
+
+test("blocks startup when a persisted browser run needs recovery", async () => {
+  const tempRoot = await fs.mkdtemp(join(tmpdir(), "antidetect-api-recovery-"));
+  const rootDir = join(tempRoot, "app");
+  const port = await createFreePort();
+  let apiProcess: ChildProcess | undefined;
+
+  try {
+    await seedBlockingRun(rootDir);
+
+    apiProcess = spawnApi(rootDir, port);
+    const apiOutput = captureOutput(apiProcess);
+    const apiExitCode = await waitForExit(apiProcess);
+
+    expect(apiExitCode).not.toBe(0);
+    expect(apiOutput.stderr).toContain("Recovery barrier blocked API startup");
+    expect(apiOutput.stderr).toContain("run-recovery");
+    expect(apiOutput.stderr).not.toContain("PRIVATE_PROCESS_METADATA_TEST_MARKER");
+    expect(apiOutput.stderr).not.toContain("PRIVATE_FAILURE_DETAILS_TEST_MARKER");
+    expect(apiOutput.stdout).not.toContain("Antidetect API listening");
+    await expectPortClosed(port);
+
+    const paths = resolveAppPaths({ env: { ANTIDETECT_HOME: rootDir } });
+    const owner = acquireRootOwnership(paths.databasePath);
+    const database = createAppDatabase(owner);
+    try {
+      await expect(
+        new SqliteBrowserRunRepository(database).findById("run-recovery"),
+      ).resolves.toMatchObject({
+        status: "starting",
+        processPid: 424242,
+        processIdentity: "PRIVATE_PROCESS_METADATA_TEST_MARKER",
+        failureCode: "PRIVATE_FAILURE_DETAILS_TEST_MARKER",
+      });
+    } finally {
+      await database.destroy();
+      owner.close();
+    }
+
+    for (const directoryName of ["config", "profiles", "runtime", "logs"]) {
+      await expect(fs.stat(join(rootDir, directoryName))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    }
+  } finally {
+    await stopProcess(apiProcess);
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 }, 20_000);

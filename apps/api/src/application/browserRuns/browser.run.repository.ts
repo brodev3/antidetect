@@ -16,5 +16,6 @@ export interface BrowserRunRepository {
   create(run: BrowserRun): Promise<BrowserRun>;
   findById(id: string): Promise<BrowserRun | null>;
   findActiveByProfileId(profileId: string): Promise<BrowserRun | null>;
+  listOccupying(): Promise<readonly BrowserRun[]>;
   save(run: BrowserRun): Promise<BrowserRun>;
 }

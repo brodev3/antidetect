@@ -93,7 +93,7 @@ test("rejects an unknown profile", async () => {
   });
 });
 
-test("transitions a run through the lifecycle and makes stop idempotent", async () => {
+test("persists lifecycle transitions and makes repeated stopped transitions idempotent", async () => {
   await withService(async (service) => {
     const starting = await service.start(firstProfile.id);
     const running = await service.transition(starting.id, "running");

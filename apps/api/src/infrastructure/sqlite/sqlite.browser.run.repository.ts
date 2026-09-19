@@ -1,15 +1,16 @@
+import { sql } from "kysely";
 import type {
   BrowserRun,
   BrowserRunRepository,
 } from "../../application/browserRuns/browser.run.repository.js";
+import { browserRunOccupyingStatuses } from "../../application/browserRuns/browser.run.state.js";
 import type { AppDatabase, BrowserRunsTable } from "./app.database.js";
 
-const occupyingStatuses = [
-  "starting",
-  "running",
-  "stopping",
-  "recovery_required",
-] as const;
+// These application-owned constants must match the partial index predicate.
+// Profile IDs and other external values remain bound query parameters.
+const occupyingStatusLiterals = browserRunOccupyingStatuses.map((status) =>
+  sql.lit(status),
+);
 
 function toBrowserRun(row: BrowserRunsTable): BrowserRun {
   return {
@@ -62,12 +63,25 @@ export class SqliteBrowserRunRepository implements BrowserRunRepository {
       .selectFrom("browser_runs")
       .selectAll()
       .where("profile_id", "=", profileId)
-      .where("status", "in", occupyingStatuses)
+      .where("status", "in", occupyingStatusLiterals)
       .orderBy("created_at", "desc")
       .orderBy("id", "desc")
       .executeTakeFirst();
 
     return row === undefined ? null : toBrowserRun(row);
+  }
+
+  async listOccupying(): Promise<readonly BrowserRun[]> {
+    const rows = await this.database
+      .selectFrom("browser_runs")
+      .selectAll()
+      .where("status", "in", occupyingStatusLiterals)
+      .orderBy("profile_id", "asc")
+      .orderBy("created_at", "asc")
+      .orderBy("id", "asc")
+      .execute();
+
+    return rows.map(toBrowserRun);
   }
 
   async save(run: BrowserRun): Promise<BrowserRun> {
