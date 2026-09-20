@@ -221,6 +221,8 @@ Interface выше концептуальный и уточняется посл
 
 Отдельный ненадёжный `profile.status` не хранится, если состояние можно вывести из записи занятости, запуска и проверенного состояния процессов. Запись занятости не равна утверждению, что браузер сейчас работает: она также запрещает опасные операции при неопределённом состоянии.
 
+Публичный ответ Phase 2 по ADR-0013 содержит только `id`, `displayName`, тестовый `identityRef`, `createdAt` и `updatedAt`; notes, proxy/runtime metadata и отдельный `status` в этот контракт не входят.
+
 ### `proxies`
 
 - UUID;
@@ -361,7 +363,7 @@ Conflict/idempotency и sync/async HTTP semantics определяются в `D
 
 SSE не является source of truth, использует typed events, event IDs, heartbeat, bounded buffers и освобождает listeners при disconnect. После потери событий UI восстанавливается через GET.
 
-Точные routes, status codes и replay semantics определяются в `D-004`, `D-007`, `D-010`.
+Первый профильный контракт принят в [ADR-0013](adr/0013-profile-http-contract.md): строгий `POST /profiles`, `GET /profiles/:profileId` и ограниченный `GET /profiles` с порядком `createdAt ASC, id ASC`, envelope `{ items, nextOffset }` и ошибками `{ error: { code, message } }`. Клиент задаёт только имя, UUID/timestamps/test identity создаёт сервер; отдельного `profile.status` в ответе нет. Zod-схемы реализованы, но маршруты и их OpenAPI-интеграция ещё не подключены. Остальные routes, status codes и replay semantics продолжают определяться в `D-004`, `D-007`, `D-010`.
 
 Контракты принимаются по работающему сценарию: создание/чтение профиля в Phase 2, команды и чтение состояния с тестовым движком в Phase 3, поток событий и оставшиеся возможности в Phase 6. До первого списка задаются ограничения размера, порядок и правила выборки. До подключения UI задаются состояния загрузки, пустого списка, ошибки и занятости, а также доступные действия; неизвестное состояние браузера нельзя показывать как безопасно остановленное. Число прокси означает число записей прокси, а не число профилей с назначенным прокси.
 
@@ -369,7 +371,7 @@ SSE не является source of truth, использует typed events, ev
 
 1. API слушает только `127.0.0.1`/`::1`.
 2. UI и API используют один origin; wildcard CORS запрещён.
-3. API принимает только literal loopback `API_HOST` (`127.0.0.1` или `::1`); каждый запрос обязан иметь ровно один `Host`, совпадающий с configured host/port, а присутствующий `Origin` — точно совпадать с локальным `http://` origin. Это базовая browser-page boundary; защита от произвольных локальных процессов и token/session policy остаются отдельным решением D-002.
+3. API принимает только literal loopback `API_HOST` (`127.0.0.1` или `::1`); каждый запрос обязан иметь ровно один `Host`, совпадающий с configured host/port, а присутствующий `Origin` — точно совпадать с локальным `http://` origin. По ADR-0013 этого достаточно только для ограниченных create/read/list-операций с несекретными profile metadata; риск вызова произвольным локальным процессом принят для этого среза. Local token/session policy остаётся hard gate до proxy credentials, удаления и browser-control API.
 4. Profile IDs генерируются сервером.
 5. Пользовательский ввод не формирует filesystem paths.
 6. Все JSON, filesystem и SDK inputs валидируются на boundary.
@@ -382,7 +384,7 @@ SSE не является source of truth, использует typed events, ev
 13. Diagnostics export проходит отдельную redaction.
 14. CDP metadata выдаётся только по явно принятой access policy.
 
-Открытые security decisions: local token/session policy для localhost access (`D-002`), credentials at rest (`D-003`), CDP exposure (`D-005`), engine integrity (`D-008`).
+Открытые security decisions: local token/session policy для чувствительного localhost access (`D-002`), credentials at rest (`D-003`), CDP exposure (`D-005`), engine integrity (`D-008`).
 
 Известный residual risk: ShardX может передавать proxy credentials через process command line. До проверки и возможного local proxy bridge нельзя заявлять полную защиту от локального пользователя, читающего argv.
 

@@ -1,0 +1,53 @@
+import { z } from "zod";
+
+export const PROFILE_DISPLAY_NAME_MAX_LENGTH = 100;
+export const PROFILE_LIST_DEFAULT_LIMIT = 50;
+export const PROFILE_LIST_MAX_LIMIT = 100;
+
+export const profileIdSchema = z.uuid();
+
+export const profileResponseSchema = z.strictObject({
+  id: profileIdSchema,
+  displayName: z.string().min(1).max(PROFILE_DISPLAY_NAME_MAX_LENGTH),
+  identityRef: z.string().min(1).max(200),
+  createdAt: z.iso.datetime({ offset: true }),
+  updatedAt: z.iso.datetime({ offset: true }),
+});
+
+export const createProfileRequestSchema = z.strictObject({
+  displayName: z.string().trim().min(1).max(PROFILE_DISPLAY_NAME_MAX_LENGTH),
+});
+
+export const profilePathParamsSchema = z.strictObject({
+  profileId: profileIdSchema,
+});
+
+const queryIntegerSchema = z.union([
+  z.number(),
+  z
+    .string()
+    .regex(/^(0|[1-9]\d*)$/)
+    .transform((value) => Number(value)),
+]);
+
+const safeQueryIntegerSchema = queryIntegerSchema.pipe(
+  z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+);
+
+export const listProfilesQuerySchema = z.strictObject({
+  limit: safeQueryIntegerSchema
+    .pipe(z.number().min(1).max(PROFILE_LIST_MAX_LIMIT))
+    .default(PROFILE_LIST_DEFAULT_LIMIT),
+  offset: safeQueryIntegerSchema.default(0),
+});
+
+export const listProfilesResponseSchema = z.strictObject({
+  items: z.array(profileResponseSchema),
+  nextOffset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(),
+});
+
+export type ProfileResponse = z.infer<typeof profileResponseSchema>;
+export type CreateProfileRequest = z.infer<typeof createProfileRequestSchema>;
+export type ProfilePathParams = z.infer<typeof profilePathParamsSchema>;
+export type ListProfilesQuery = z.infer<typeof listProfilesQuerySchema>;
+export type ListProfilesResponse = z.infer<typeof listProfilesResponseSchema>;

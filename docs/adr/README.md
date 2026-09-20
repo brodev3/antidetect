@@ -1,7 +1,7 @@
 # Реестр архитектурных решений (ADR)
 
 > Статус: активный индекс
-> Последняя ревизия: 2026-09-15
+> Последняя ревизия: 2026-09-20
 
 ADR фиксирует существенное принятое решение: контекст, выбор, альтернативы и последствия. Progress, task list, vendor claims и открытые вопросы в ADR не хранятся.
 
@@ -21,6 +21,7 @@ ADR фиксирует существенное принятое решение:
 | [0010 — SQLite exclusive root ownership](0010-sqlite-exclusive-root-ownership.md) | Принятое решение; shared SQLite/Kysely boundary и локальный startup gate выполнены | Один API владеет всем `ANTIDETECT_HOME` через эксклюзивную блокировку основного SQLite-соединения; миграции, recovery и переносимые проверки остаются открыты |
 | [0011 — Localhost request policy](0011-localhost-request-policy.md) | Принятое базовое решение; local auth открыта | Literal loopback, строгие `Host`/`Origin` и fail-closed startup для внешнего `API_HOST` |
 | [0012 — Browser-run occupancy](0012-browser-run-occupancy.md) | Принято для схемы и lifecycle-сервиса Phase 2; recovery не реализован | Отдельная `browser_runs`, блокирующие статусы, transition guard и partial unique index на один активный run профиля |
+| [0013 — Profile HTTP contract](0013-profile-http-contract.md) | Принято; Zod-контракты реализованы, HTTP wiring ожидает следующего шага | Создание/чтение профиля, ограниченный список, ошибки и временная граница доступа Phase 2 |
 
 ## Правила
 
