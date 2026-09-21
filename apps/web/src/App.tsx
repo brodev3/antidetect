@@ -4,12 +4,13 @@ import { fetchProfiles } from "./api/profiles";
 
 type ProfileLifecycleStatus =
   "running" | "stopped" | "starting" | "stopping" | "failed";
-type ProfileReadiness = "ready" | "setup_required" | "recovery_required";
+type ProfileReadiness = "ready" | "unknown" | "setup_required" | "recovery_required";
 type ProfileDisplayStatus =
   | "ready"
   | "running"
   | "starting"
   | "stopping"
+  | "unknown"
   | "setup_required"
   | "recovery_required"
   | "failed";
@@ -272,7 +273,7 @@ function mapApiProfile(profile: ProfileResponse): DemoProfile {
     name: profile.displayName,
     tags: [],
     status: "stopped",
-    readiness: "setup_required",
+    readiness: "unknown",
     lastRunAt: null,
     identity: {
       platform: "Identity pending",
@@ -306,6 +307,7 @@ function formatStatus(status: ProfileDisplayStatus): string {
     running: "Running",
     starting: "Starting",
     stopping: "Stopping",
+    unknown: "Unknown",
     setup_required: "Setup required",
     recovery_required: "Recovery required",
     failed: "Failed",
@@ -331,6 +333,7 @@ function formatStatusMeta(profile: DemoProfile, status: ProfileDisplayStatus): s
     running: "active session",
     starting: "initializing",
     stopping: "closing session",
+    unknown: "not provided by API",
     setup_required: "fingerprint missing",
     recovery_required: "interrupted run",
     failed: "last launch failed",
@@ -498,6 +501,10 @@ function getActionLabel(status: ProfileDisplayStatus): string {
     return "Stopping…";
   }
 
+  if (status === "unknown") {
+    return "Unavailable";
+  }
+
   if (status === "setup_required") {
     return "Configure";
   }
@@ -518,7 +525,7 @@ function ProfileActionIcon({ status }: { status: ProfileDisplayStatus }) {
     );
   }
 
-  if (status === "failed" || status === "recovery_required") {
+  if (status === "failed" || status === "recovery_required" || status === "unknown") {
     return null;
   }
 
@@ -1031,6 +1038,7 @@ export function App() {
             <option value="running">Running</option>
             <option value="starting">Starting</option>
             <option value="stopping">Stopping</option>
+            <option value="unknown">Unknown</option>
             <option value="setup_required">Setup required</option>
             <option value="recovery_required">Recovery required</option>
             <option value="failed">Failed</option>
@@ -1356,7 +1364,9 @@ export function App() {
                           displayStatus
                         }
                         disabled={
-                          displayStatus === "starting" || displayStatus === "stopping"
+                          displayStatus === "starting" ||
+                          displayStatus === "stopping" ||
+                          displayStatus === "unknown"
                         }
                         type="button"
                       >

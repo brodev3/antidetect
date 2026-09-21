@@ -680,6 +680,10 @@ h1 {
   box-shadow: inset 3px 0 0 var(--color-primary-dark);
 }
 
+.profile-entry--unknown {
+  background: var(--color-surface);
+}
+
 .profile-entry--setup_required {
   background: var(--color-surface-warning);
   box-shadow: inset 3px 0 0 var(--color-state-warning);
@@ -796,6 +800,10 @@ h1 {
   background: var(--color-action-disabled);
   cursor: wait;
   opacity: 1;
+}
+
+.profile-entry__actions .profile-action__primary--unknown {
+  cursor: not-allowed;
 }
 
 .profile-entry__actions .profile-action__primary--starting,
@@ -1655,6 +1663,10 @@ h1 {
   color: var(--color-state-stopping);
 }
 
+.status--unknown {
+  color: var(--color-state-stopped);
+}
+
 .status--ready {
   color: var(--color-state-ready);
 }
@@ -2141,6 +2153,10 @@ h1 {
   background: var(--color-surface-progress);
 }
 
+.app-frame[data-theme="dark"] .profile-entry--unknown {
+  background: var(--color-surface);
+}
+
 .app-frame[data-theme="dark"] .profile-entry--setup_required {
   background: var(--color-surface-warning);
   box-shadow: inset 3px 0 0 var(--color-state-warning);
@@ -2378,6 +2394,10 @@ h1 {
 
 .app-frame[data-theme="dark"] .status--stopping {
   color: var(--color-state-stopping);
+}
+
+.app-frame[data-theme="dark"] .status--unknown {
+  color: var(--color-state-stopped);
 }
 
 .app-frame[data-theme="dark"] .status--ready {
