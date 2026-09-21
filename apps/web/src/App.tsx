@@ -1,6 +1,9 @@
 import * as React from "react";
-import type { ProfileResponse } from "@antidetect/contracts";
-import { fetchProfiles } from "./api/profiles";
+import {
+  PROFILE_DISPLAY_NAME_MAX_LENGTH,
+  type ProfileResponse,
+} from "@antidetect/contracts";
+import { createProfile, fetchProfiles } from "./api/profiles";
 
 type ProfileLifecycleStatus =
   "running" | "stopped" | "starting" | "stopping" | "failed";
@@ -736,6 +739,12 @@ export function App() {
   >({});
   const [selectedProxyProfile, setSelectedProxyProfile] =
     React.useState<DemoProfile | null>(null);
+  const [isCreateProfileOpen, setIsCreateProfileOpen] = React.useState(false);
+  const [createProfileName, setCreateProfileName] = React.useState("");
+  const [createProfileError, setCreateProfileError] = React.useState<string | null>(
+    null,
+  );
+  const [isSubmittingProfile, setIsSubmittingProfile] = React.useState(false);
   const [profileLoadState, setProfileLoadState] = React.useState<ProfileLoadState>({
     status: "loading",
   });
@@ -758,6 +767,62 @@ export function App() {
   const demoMode =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).has("demo");
+
+  function openCreateProfilePanel() {
+    setSelectedProxyProfile(null);
+    setCreateProfileName("");
+    setCreateProfileError(null);
+    setIsCreateProfileOpen(true);
+  }
+
+  function closeCreateProfilePanel() {
+    if (isSubmittingProfile) {
+      return;
+    }
+
+    setIsCreateProfileOpen(false);
+    setCreateProfileError(null);
+  }
+
+  async function handleCreateProfileSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (demoMode) {
+      setCreateProfileError("Demo mode is read-only");
+      return;
+    }
+
+    const displayName = createProfileName.trim();
+    if (displayName.length === 0) {
+      setCreateProfileError("Enter a profile name");
+      return;
+    }
+
+    if (displayName.length > PROFILE_DISPLAY_NAME_MAX_LENGTH) {
+      setCreateProfileError(
+        `Profile name must be ${PROFILE_DISPLAY_NAME_MAX_LENGTH} characters or fewer`,
+      );
+      return;
+    }
+
+    setCreateProfileError(null);
+    setIsSubmittingProfile(true);
+
+    try {
+      await createProfile({ displayName });
+      setCreateProfileName("");
+      setIsCreateProfileOpen(false);
+      setProfileReloadAttempt((current) => current + 1);
+    } catch (error: unknown) {
+      setCreateProfileError(
+        error instanceof Error && error.message.length > 0
+          ? error.message
+          : "Unable to create profile",
+      );
+    } finally {
+      setIsSubmittingProfile(false);
+    }
+  }
 
   React.useEffect(() => {
     if (demoMode) {
@@ -866,13 +931,14 @@ export function App() {
   }, [visibleProfiles.length]);
 
   React.useEffect(() => {
-    if (selectedProxyProfile === null) {
+    if (selectedProxyProfile === null && !isCreateProfileOpen) {
       return;
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !isSubmittingProfile) {
         setSelectedProxyProfile(null);
+        setIsCreateProfileOpen(false);
       }
     };
 
@@ -881,7 +947,7 @@ export function App() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [selectedProxyProfile]);
+  }, [isCreateProfileOpen, isSubmittingProfile, selectedProxyProfile]);
   const hasActiveViewOptions =
     normalizedSearchQuery.length > 0 ||
     statusFilter !== "all" ||
@@ -1061,6 +1127,8 @@ export function App() {
           ) : null}
           <button
             className="button button--primary profile-tools__create"
+            aria-haspopup="dialog"
+            onClick={openCreateProfilePanel}
             type="button"
           >
             Create profile
@@ -1483,6 +1551,84 @@ export function App() {
               <p className="proxy-details-panel__note">
                 Proxy credentials are not shown in this view.
               </p>
+            </aside>
+          </>
+        ) : null}
+
+        {isCreateProfileOpen ? (
+          <>
+            <button
+              aria-label="Close create profile form"
+              className="proxy-details-backdrop"
+              onClick={closeCreateProfilePanel}
+              type="button"
+            />
+            <aside
+              aria-labelledby="create-profile-title"
+              aria-modal="true"
+              className="proxy-details-panel create-profile-panel"
+              role="dialog"
+            >
+              <div className="proxy-details-panel__header">
+                <div>
+                  <p className="proxy-details-panel__eyebrow">Profiles</p>
+                  <h2 id="create-profile-title">Create profile</h2>
+                  <p className="proxy-details-panel__profile">
+                    The server will assign the profile ID and code.
+                  </p>
+                </div>
+                <button
+                  aria-label="Close create profile form"
+                  className="proxy-details-panel__close"
+                  disabled={isSubmittingProfile}
+                  onClick={closeCreateProfilePanel}
+                  type="button"
+                >
+                  <svg aria-hidden="true" fill="none" viewBox="0 0 16 16">
+                    <path d="m3.5 3.5 9 9M12.5 3.5l-9 9" />
+                  </svg>
+                </button>
+              </div>
+
+              <form
+                className="create-profile-form"
+                onSubmit={handleCreateProfileSubmit}
+              >
+                <label className="create-profile-form__field">
+                  <span>Profile name</span>
+                  <input
+                    autoFocus
+                    disabled={isSubmittingProfile}
+                    maxLength={PROFILE_DISPLAY_NAME_MAX_LENGTH}
+                    onChange={(event) => setCreateProfileName(event.target.value)}
+                    placeholder="e.g. Research profile"
+                    value={createProfileName}
+                  />
+                </label>
+                {createProfileError ? (
+                  <p className="create-profile-form__error" role="alert">
+                    {createProfileError}
+                  </p>
+                ) : null}
+                <div className="create-profile-form__actions">
+                  <button
+                    className="button button--secondary"
+                    disabled={isSubmittingProfile}
+                    onClick={closeCreateProfilePanel}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    aria-busy={isSubmittingProfile}
+                    className="button button--primary"
+                    disabled={isSubmittingProfile}
+                    type="submit"
+                  >
+                    {isSubmittingProfile ? "Creating…" : "Create profile"}
+                  </button>
+                </div>
+              </form>
             </aside>
           </>
         ) : null}
