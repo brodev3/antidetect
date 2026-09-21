@@ -2,7 +2,7 @@
 
 > Статус: практический Phase 0 VM-spike закрыт 2026-08-21 через согласованную корректировку scope; наблюдения достаточны для foundation, но supply-chain и live-runtime gates остаются открыты
 > Последняя ревизия: 2026-09-21
-> Текущая контрольная точка: локальный Phase 1 gate закрыт на clean checkout `8549bb3` в `antidetect-v2-public`. Профильный Phase 2 API slice — сквозной минимальный срез — подключён поверх общего SQLite handle; список поддерживает bounded search/sort с allowlist, а quality loop и startup integration проверяются перед коммитом. Проверка зависимостей во внешнем реестре в этом шаге не повторялась; удалённый CI не подтверждён. Интеграция настоящего ShardX не разрешена.
+> Текущая контрольная точка: локальный Phase 1 gate закрыт на clean checkout `ca07635` в `antidetect-v2-public`. Профильный Phase 2 API slice — сквозной минимальный срез — подключён поверх общего SQLite handle; список поддерживает bounded search/sort с allowlist, а постоянный `profileCode` хранится в SQLite и возвращается API. Quality loop и startup integration проходят локально; проверка зависимостей во внешнем реестре в этом шаге не повторялась, удалённый CI не подтверждён. Интеграция настоящего ShardX не разрешена.
 > Авторитетен для: порядка реализации, phase gates и acceptance scenarios
 
 Архитектура: [architecture.md](architecture.md). Границы продукта: [product-scope.md](product-scope.md).
