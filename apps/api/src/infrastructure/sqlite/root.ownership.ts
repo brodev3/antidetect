@@ -38,12 +38,17 @@ function isBusyError(error: unknown): boolean {
   );
 }
 
+function unicodeLower(value: unknown): string | null {
+  return typeof value === "string" ? value.toLowerCase() : null;
+}
+
 export function acquireRootOwnership(databasePath: string): RootOwnership {
   let database: ReturnType<typeof Database> | undefined;
 
   try {
     database = new Database(databasePath, { timeout: 250 });
     database.pragma("foreign_keys = ON");
+    database.function("unicode_lower", { deterministic: true }, unicodeLower);
     database.pragma("locking_mode = EXCLUSIVE");
     database.exec("BEGIN EXCLUSIVE; COMMIT;");
   } catch (error) {

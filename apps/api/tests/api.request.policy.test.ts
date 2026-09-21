@@ -58,3 +58,78 @@ test.each([
     statusCode: 403,
   });
 });
+
+test("requires and issues a local session for non-public routes", async () => {
+  const app = await buildApp({
+    profileRepository: createProfileRepositoryStub(),
+  });
+
+  try {
+    const unauthorizedResponse = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/profiles",
+        headers: { host: validHost },
+      });
+
+    expect(unauthorizedResponse.statusCode).toBe(401);
+    expect(unauthorizedResponse.json()).toEqual({
+      message: "Unauthorized",
+      statusCode: 401,
+    });
+
+    const sessionResponse = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/session",
+        headers: { host: validHost },
+      });
+    const setCookie = String(sessionResponse.headers["set-cookie"] ?? "");
+    const sessionCookie = setCookie.split(";", 1)[0];
+
+    expect(sessionResponse.statusCode).toBe(204);
+    expect(setCookie).toMatch(
+      /^antidetect_session=[A-Za-z0-9_-]+; Path=\/; HttpOnly; SameSite=Strict$/,
+    );
+
+    const repeatedSessionResponse = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/session",
+        headers: { host: validHost, cookie: sessionCookie },
+      });
+
+    expect(repeatedSessionResponse.statusCode).toBe(204);
+    expect(repeatedSessionResponse.headers["set-cookie"]).toBeUndefined();
+
+    const authorizedResponse = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/profiles",
+        headers: { host: validHost, cookie: sessionCookie },
+      });
+
+    expect(authorizedResponse.statusCode).toBe(200);
+
+    const invalidResponse = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/profiles",
+        headers: { host: validHost, cookie: "antidetect_session=invalid" },
+      });
+
+    expect(invalidResponse.statusCode).toBe(401);
+  } finally {
+    await app.close();
+  }
+});

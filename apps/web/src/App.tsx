@@ -279,7 +279,7 @@ function mapApiProfile(profile: ProfileResponse): DemoProfile {
     readiness: "unknown",
     lastRunAt: null,
     identity: {
-      platform: "Identity pending",
+      platform: "Pending",
     },
     network: {
       address: null,
@@ -407,7 +407,10 @@ function splitIdentityPlatform(platform: string): {
 } {
   const [label = platform, locale] = platform.split(" / ", 2);
 
-  return { label, locale: locale ?? null };
+  return {
+    label: label === "Identity pending" ? "Pending" : label,
+    locale: locale ?? null,
+  };
 }
 
 function CountryFlag({ country }: { country: ProxyCountry }) {
@@ -1385,6 +1388,7 @@ export function App() {
                       <div
                         aria-label={"Identity: " + profile.identity.platform}
                         className="profile-identity__content"
+                        title={profile.identity.platform}
                       >
                         <span aria-hidden="true" className="profile-identity__mark">
                           <PlatformIcon platform={profile.identity.platform} />
@@ -1573,9 +1577,6 @@ export function App() {
                 <div>
                   <p className="proxy-details-panel__eyebrow">Profiles</p>
                   <h2 id="create-profile-title">Create profile</h2>
-                  <p className="proxy-details-panel__profile">
-                    The server will assign the profile ID and code.
-                  </p>
                 </div>
                 <button
                   aria-label="Close create profile form"

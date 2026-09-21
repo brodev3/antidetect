@@ -1,9 +1,15 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ApiServerConfig } from "../../config/api.server.js";
+import { LocalSessionStore } from "./local.session.js";
 
 const FORBIDDEN_RESPONSE = {
   message: "Forbidden",
   statusCode: 403,
+} as const;
+
+const UNAUTHORIZED_RESPONSE = {
+  message: "Unauthorized",
+  statusCode: 401,
 } as const;
 
 function formatExpectedHost(config: ApiServerConfig): string {
@@ -32,7 +38,11 @@ function isAllowedApiRequest(
   request: FastifyRequest,
   config: ApiServerConfig,
 ): boolean {
-  if (hasDuplicateHeader(request, "host") || hasDuplicateHeader(request, "origin")) {
+  if (
+    hasDuplicateHeader(request, "host") ||
+    hasDuplicateHeader(request, "origin") ||
+    hasDuplicateHeader(request, "cookie")
+  ) {
     return false;
   }
 
@@ -45,13 +55,36 @@ function isAllowedApiRequest(
   return origin === undefined || origin === formatExpectedOrigin(config);
 }
 
+function getRequestPath(url: string): string {
+  const queryStart = url.indexOf("?");
+  return queryStart === -1 ? url : url.slice(0, queryStart);
+}
+
+function isPublicPath(path: string): boolean {
+  return (
+    path === "/health" ||
+    path === "/session" ||
+    path === "/docs" ||
+    path === "/docs-json" ||
+    path.startsWith("/docs/")
+  );
+}
+
 export function registerApiRequestPolicy(
   fastify: FastifyInstance,
   config: ApiServerConfig,
+  localSession: LocalSessionStore,
 ): void {
   fastify.addHook("onRequest", async (request, reply) => {
     if (!isAllowedApiRequest(request, config)) {
       return reply.code(403).send(FORBIDDEN_RESPONSE);
+    }
+
+    if (
+      !isPublicPath(getRequestPath(request.url)) &&
+      !localSession.isValidCookieHeader(request.headers.cookie)
+    ) {
+      return reply.code(401).send(UNAUTHORIZED_RESPONSE);
     }
   });
 }

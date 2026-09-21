@@ -5,15 +5,22 @@ import { ZodSerializerInterceptor, ZodValidationPipe } from "nestjs-zod";
 import type { ProfileRepository } from "./application/profiles/profile.repository.js";
 import { HealthModule } from "./health.module.js";
 import { ApiErrorFilter } from "./infrastructure/http/api.error.filter.js";
+import { LocalSessionController } from "./infrastructure/http/local.session.controller.js";
+import { LocalSessionStore } from "./infrastructure/http/local.session.js";
 import { ProfilesModule } from "./profiles.module.js";
 
 @Module({})
 export class AppModule {
-  static register(profileRepository: ProfileRepository): DynamicModule {
+  static register(
+    profileRepository: ProfileRepository,
+    localSession: LocalSessionStore,
+  ): DynamicModule {
     return {
       module: AppModule,
       imports: [HealthModule, ProfilesModule.register(profileRepository)],
+      controllers: [LocalSessionController],
       providers: [
+        { provide: LocalSessionStore, useValue: localSession },
         {
           provide: APP_PIPE,
           useClass: ZodValidationPipe,

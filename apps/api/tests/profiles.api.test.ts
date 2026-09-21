@@ -25,6 +25,7 @@ interface ProfileAppFixture {
   readonly app: NestFastifyApplication;
   readonly repository: SqliteProfileRepository;
   readonly rootOwnership: RootOwnership;
+  readonly requestHeaders: Record<string, string>;
 }
 
 interface OpenApiParameter {
@@ -60,8 +61,28 @@ async function openProfileApp(paths: AppPaths): Promise<ProfileAppFixture> {
     await runMigrations(database);
     const repository = new SqliteProfileRepository(database);
     const app = await buildApp({ profileRepository: repository });
+    const sessionResponse = await app.getHttpAdapter().getInstance().inject({
+      method: "GET",
+      url: "/session",
+      headers: requestHeaders,
+    });
+    const setCookie = String(sessionResponse.headers["set-cookie"] ?? "");
+    const sessionCookie = setCookie.split(";", 1)[0];
 
-    return { app, repository, rootOwnership };
+    if (
+      sessionResponse.statusCode !== 204 ||
+      sessionCookie === undefined ||
+      sessionCookie === ""
+    ) {
+      throw new Error("Unable to establish API test session");
+    }
+
+    return {
+      app,
+      repository,
+      rootOwnership,
+      requestHeaders: { ...requestHeaders, cookie: sessionCookie },
+    };
   } catch (error) {
     rootOwnership.close();
     throw error;
@@ -100,7 +121,7 @@ test("creates a profile and reads it after reopening the database", async () => 
       .inject({
         method: "POST",
         url: "/profiles",
-        headers: requestHeaders,
+        headers: firstFixture.requestHeaders,
         payload: { displayName: "  Research profile  " },
       });
 
@@ -124,7 +145,7 @@ test("creates a profile and reads it after reopening the database", async () => 
       .inject({
         method: "GET",
         url: `/profiles/${createdProfile.id}`,
-        headers: requestHeaders,
+        headers: secondFixture.requestHeaders,
       });
 
     expect(getResponse.statusCode).toBe(200);
@@ -171,7 +192,7 @@ test("returns a bounded and stably ordered profile list", async () => {
     const firstPageResponse = await fixture.app.getHttpAdapter().getInstance().inject({
       method: "GET",
       url: "/profiles?limit=2&offset=0",
-      headers: requestHeaders,
+      headers: fixture.requestHeaders,
     });
     const firstPage = listProfilesResponseSchema.parse(firstPageResponse.json());
 
@@ -185,7 +206,7 @@ test("returns a bounded and stably ordered profile list", async () => {
     const secondPageResponse = await fixture.app.getHttpAdapter().getInstance().inject({
       method: "GET",
       url: "/profiles?limit=2&offset=2",
-      headers: requestHeaders,
+      headers: fixture.requestHeaders,
     });
     const secondPage = listProfilesResponseSchema.parse(secondPageResponse.json());
 
@@ -196,7 +217,7 @@ test("returns a bounded and stably ordered profile list", async () => {
     const searchedResponse = await fixture.app.getHttpAdapter().getInstance().inject({
       method: "GET",
       url: "/profiles?search=ir&sortBy=displayName&sortOrder=desc&limit=10",
-      headers: requestHeaders,
+      headers: fixture.requestHeaders,
     });
     expect(searchedResponse.statusCode, searchedResponse.body).toBe(200);
     const searchedProfiles = listProfilesResponseSchema.parse(searchedResponse.json());
@@ -223,23 +244,23 @@ test("maps validation and not-found failures to stable public errors", async () 
         .inject({
           method: "POST",
           url: "/profiles",
-          headers: requestHeaders,
+          headers: fixture.requestHeaders,
           payload: { displayName: "   " },
         }),
       fixture.app.getHttpAdapter().getInstance().inject({
         method: "GET",
         url: "/profiles/not-a-uuid",
-        headers: requestHeaders,
+        headers: fixture.requestHeaders,
       }),
       fixture.app.getHttpAdapter().getInstance().inject({
         method: "GET",
         url: "/profiles?limit=101",
-        headers: requestHeaders,
+        headers: fixture.requestHeaders,
       }),
       fixture.app.getHttpAdapter().getInstance().inject({
         method: "GET",
         url: "/profiles?sortBy=id",
-        headers: requestHeaders,
+        headers: fixture.requestHeaders,
       }),
     ]);
 
@@ -256,7 +277,7 @@ test("maps validation and not-found failures to stable public errors", async () 
     const notFoundResponse = await fixture.app.getHttpAdapter().getInstance().inject({
       method: "GET",
       url: "/profiles/00000000-0000-4000-8000-000000000099",
-      headers: requestHeaders,
+      headers: fixture.requestHeaders,
     });
 
     expect(notFoundResponse.statusCode).toBe(404);
@@ -274,7 +295,7 @@ test("maps validation and not-found failures to stable public errors", async () 
         method: "POST",
         url: "/profiles",
         headers: {
-          ...requestHeaders,
+          ...fixture.requestHeaders,
           origin: "https://malicious.example",
         },
         payload: { displayName: "Blocked" },

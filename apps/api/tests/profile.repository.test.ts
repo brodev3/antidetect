@@ -174,3 +174,39 @@ test("filters by display name and applies an allowlisted sort", async () => {
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test("filters Cyrillic display names without case sensitivity", async () => {
+  const tempRoot = await fs.mkdtemp(
+    join(tmpdir(), "antidetect-profile-unicode-query-"),
+  );
+  const paths = resolveAppPaths({
+    env: { ANTIDETECT_HOME: join(tempRoot, "app") },
+  });
+  await ensureAppRootDirectories(paths);
+
+  const owner = acquireRootOwnership(paths.databasePath);
+  const database = createAppDatabase(owner);
+
+  try {
+    await runMigrations(database);
+    const repository = new SqliteProfileRepository(database);
+    await repository.create({
+      ...profile,
+      id: "profile-cyrillic",
+      displayName: "Рабочий профиль",
+    });
+
+    await expect(
+      repository.list({
+        limit: 10,
+        offset: 0,
+        search: "ПРОФИЛЬ",
+        sortBy: "displayName",
+        sortOrder: "asc",
+      }),
+    ).resolves.toMatchObject([{ displayName: "Рабочий профиль" }]);
+  } finally {
+    owner.close();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});

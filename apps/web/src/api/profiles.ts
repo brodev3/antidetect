@@ -8,10 +8,28 @@ import {
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/api").replace(/\/$/, "");
 
+async function ensureApiSession(signal?: AbortSignal): Promise<void> {
+  const requestInit: RequestInit = {
+    credentials: "include",
+    headers: { accept: "application/json" },
+    method: "GET",
+  };
+  if (signal !== undefined) {
+    requestInit.signal = signal;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/session`, requestInit);
+  if (!response.ok) {
+    throw new Error("Unable to establish API session");
+  }
+}
+
 export async function fetchProfiles(
   signal?: AbortSignal,
 ): Promise<readonly ProfileResponse[]> {
+  await ensureApiSession(signal);
   const requestInit: RequestInit = {
+    credentials: "include",
     headers: { accept: "application/json" },
   };
   if (signal !== undefined) {
@@ -41,8 +59,10 @@ export async function createProfile(
     throw new Error("Profile name is invalid");
   }
 
+  await ensureApiSession(signal);
   const requestInit: RequestInit = {
     body: JSON.stringify(parsedRequest.data),
+    credentials: "include",
     headers: {
       accept: "application/json",
       "content-type": "application/json",

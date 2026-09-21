@@ -9,6 +9,7 @@ import {
   type ApiServerConfig,
 } from "./config/api.server.js";
 import { registerApiRequestPolicy } from "./infrastructure/http/api.request.policy.js";
+import { LocalSessionStore } from "./infrastructure/http/local.session.js";
 
 export interface BuildAppOptions {
   readonly profileRepository: ProfileRepository;
@@ -19,14 +20,15 @@ export async function buildApp({
   profileRepository,
   config = DEFAULT_API_SERVER_CONFIG,
 }: BuildAppOptions): Promise<NestFastifyApplication> {
+  const localSession = new LocalSessionStore();
   const app = await NestFactory.create<NestFastifyApplication>(
-    AppModule.register(profileRepository),
+    AppModule.register(profileRepository, localSession),
     new FastifyAdapter({ logger: false }),
     { logger: false },
   );
   const fastify = app.getHttpAdapter().getInstance();
 
-  registerApiRequestPolicy(fastify, config);
+  registerApiRequestPolicy(fastify, config, localSession);
 
   await app.init();
 

@@ -82,7 +82,7 @@ export class SqliteProfileRepository implements ProfileRepository {
 
     if (normalizedSearch !== undefined && normalizedSearch.length > 0) {
       query = query.where(
-        sql<boolean>`instr(lower(display_name), lower(${normalizedSearch})) > 0`,
+        sql<boolean>`instr(unicode_lower(display_name), unicode_lower(${normalizedSearch})) > 0`,
       );
     }
 

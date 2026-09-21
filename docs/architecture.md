@@ -70,7 +70,7 @@ NestJS application modules/controllers
 
 ## Целевой стек
 
-Базовый набор технологий принят; фактические версии берутся из manifests — описаний пакетов — и lockfile — файла точных зависимостей. Clean checkout `8549bb3` на Node.js `24.18.0` и pnpm `11.16.0` подтвердил frozen install, format, lint, typecheck, 16 Vitest-тестов, build, API/web smoke и общий/production dependency audit. `fastify: 5.12.1` закреплён в pnpm workspace override; policy окончания строк зафиксирована в `.gitattributes`. Ветка уже опубликована; конфигурация CI — автоматических проверок — теперь включает Ubuntu, Windows и тесты запуска API, но её удалённые результаты ещё не подтверждены.
+Базовый набор технологий принят; фактические версии берутся из manifests — описаний пакетов — и lockfile — файла точных зависимостей. Локальный gate Phase 2 на Node.js `24.18.0` и pnpm `11.16.0` подтвердил frozen install, format, lint, typecheck, 131 Vitest-тест, production build, startup integration 4/4 и общий/production dependency audit. `fastify: 5.12.1` закреплён в pnpm workspace override; policy окончания строк зафиксирована в `.gitattributes`. Ветка опубликована до текущего незакоммиченного снимка; конфигурация CI — автоматических проверок — включает Ubuntu, Windows и тесты запуска API, но удалённые результаты текущего кода не подтверждены.
 
 | Область               | Принятая цель                                                                                                                 |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -204,7 +204,7 @@ Interface выше концептуальный и уточняется посл
 
 Основное SQLite-соединение остаётся открытым до конца работы API и закрывается последним ресурсом корня; длительная транзакция для этого не используется. `createAppDatabase()` передаёт Kysely тот же native handle, которым владеет root ownership, поэтому второй SQLite-клиент внутри приложения не создаётся. `verifyAppDatabase()` с `select 1` проверяет доступность соединения, а `runMigrations()` применяет явные SQL-миграции до открытия HTTP-порта. До применения новых миграций проверяется вся история: неизвестная версия, несовпадение имени или пропущенная предыдущая миграция вызывают `INCOMPATIBLE_DATABASE_SCHEMA`. Изменения схемы и запись об одной миграции выполняются атомарно; это проверено обновлением предыдущей версии и искусственным отказом записи истории. Сейчас подключены миграции `schema_migrations`/`profiles`/`profile_code_sequence`/`browser_runs`; `ProfileRepository` и `BrowserRunRepository` остаются application ports — портами прикладного слоя, — а SQLite-адаптеры реализуют их в infrastructure — инфраструктурном слое. Репозиторий профилей отдельно выдаёт постоянный `profileCode` через SQLite-последовательность и не смешивает его с техническим UUID `id`. `BrowserRunService` принимает решения о создании и переходах, а репозитории только читают и сохраняют данные. Это не заменяет recovery и не означает, что профиль готов к запуску браузера. При штатном завершении `ApiRuntime` сначала закрывает HTTP-приложение, затем root ownership; повторный `close()` безопасен. Если `app.close()` завершается ошибкой или превышает bounded timeout — ограниченное время ожидания, — root ownership не освобождается: это fail-closed — безопасный отказ с сохранением блокировки, — чтобы второй API не занял корень, пока первый процесс ещё жив. После истечения таймаута процесс завершается с ошибкой, а ОС освобождает файловую блокировку; новый владелец всё равно обязан выполнить recovery до готовности API. Владение корнем не освобождает сохраняемую занятость профилей по ADR-0009. Выполнены unit-, межпроцессные и локальные black-box проверки двух API; profile recovery, платформенное поведение сигналов и Linux CI остаются открытой частью D-015.
 
-При завершении API новые команды сначала прекращают приниматься; правило для живых браузеров и сроки завершения выбираются до реализации управления процессами. Строгая проверка `API_PORT`, запрет внешнего `API_HOST` и базовая request policy уже реализованы; local token/session policy остаётся открытой частью D-002 до расширения продуктовых HTTP-методов.
+При завершении API новые команды сначала прекращают приниматься; правило для живых браузеров и сроки завершения выбираются до реализации управления процессами. Строгая проверка `API_PORT`, запрет внешнего `API_HOST`, базовая request policy и memory-only session boundary уже реализованы; process-aware recovery и более сильная local authentication остаются открытой частью D-002/D-015 до расширения чувствительных HTTP-методов.
 
 ## Domain records
 
@@ -341,7 +341,7 @@ Conflict/idempotency и sync/async HTTP semantics определяются в `D
 - PID reuse не приводит к захвату или kill чужого process;
 - результат фиксируется typed transition/event.
 
-Безопасное правило сохранять занятость принято в ADR-0009. Конкретный способ восстановить управление, завершить либо изолировать живой процесс определяется по D-001/D-006 и проверяется отдельно на Windows. Startup-интеграция read-only barrier уже закрывает только gate готовности; process-aware recovery policy и модель с подменным движком нужны в Phase 2–3, а Phase 5 проверяет реальное восстановление, а не впервые выбирает его базовые правила. Закрытый Phase 0 не возобновляется автоматически.
+Безопасное правило сохранять занятость принято в ADR-0009. Конкретный способ восстановить управление, завершить либо изолировать живой процесс определяется по D-001/D-006 и проверяется отдельно на Windows. Startup-интеграция read-only barrier уже закрывает только gate готовности; process-aware recovery policy и модель с подменным движком нужны в Phase 3, а Phase 5 проверяет реальное восстановление, а не впервые выбирает его базовые правила. Закрытый Phase 0 не возобновляется автоматически.
 
 ## Runtime modes и CDP
 
@@ -371,7 +371,7 @@ SSE не является source of truth, использует typed events, ev
 
 1. API слушает только `127.0.0.1`/`::1`.
 2. UI и API используют один origin; wildcard CORS запрещён.
-3. API принимает только literal loopback `API_HOST` (`127.0.0.1` или `::1`); каждый запрос обязан иметь ровно один `Host`, совпадающий с configured host/port, а присутствующий `Origin` — точно совпадать с локальным `http://` origin. По ADR-0013 этого достаточно только для ограниченных create/read/list-операций с несекретными profile metadata; риск вызова произвольным локальным процессом принят для этого среза. Local token/session policy остаётся hard gate до proxy credentials, удаления и browser-control API.
+3. API принимает только literal loopback `API_HOST` (`127.0.0.1` или `::1`); каждый запрос обязан иметь ровно один `Host`, совпадающий с configured host/port, а присутствующий `Origin` — точно совпадать с локальным `http://` origin. По ADR-0013/0014 этого достаточно только для ограниченных create/read/list-операций с несекретными profile metadata; базовая session cookie защищает браузерную границу, но риск вызова произвольным локальным процессом через публичный `/session` принят для этого среза. Более сильная local authentication и CSRF/custom-header policy остаются hard gate до proxy credentials, удаления и browser-control API.
 4. Profile IDs генерируются сервером.
 5. Пользовательский ввод не формирует filesystem paths.
 6. Все JSON, filesystem и SDK inputs валидируются на boundary.
@@ -384,7 +384,7 @@ SSE не является source of truth, использует typed events, ev
 13. Diagnostics export проходит отдельную redaction.
 14. CDP metadata выдаётся только по явно принятой access policy.
 
-Открытые security decisions: local token/session policy для чувствительного localhost access (`D-002`), credentials at rest (`D-003`), CDP exposure (`D-005`), engine integrity (`D-008`).
+Открытые security decisions: более сильная local authentication и CSRF policy для чувствительного localhost access (`D-002`), credentials at rest (`D-003`), CDP exposure (`D-005`), engine integrity (`D-008`). Базовая browser session boundary принята и реализована в ADR-0014.
 
 Известный residual risk: ShardX может передавать proxy credentials через process command line. До проверки и возможного local proxy bridge нельзя заявлять полную защиту от локального пользователя, читающего argv.
 
