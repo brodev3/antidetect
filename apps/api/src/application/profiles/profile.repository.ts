@@ -9,7 +9,13 @@ export interface Profile {
 export interface ProfileListOptions {
   readonly limit: number;
   readonly offset: number;
+  readonly search?: string;
+  readonly sortBy: ProfileListSortBy;
+  readonly sortOrder: ProfileListSortOrder;
 }
+
+export type ProfileListSortBy = "createdAt" | "displayName";
+export type ProfileListSortOrder = "asc" | "desc";
 
 export interface ProfileRepository {
   create(profile: Profile): Promise<Profile>;

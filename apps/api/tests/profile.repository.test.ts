@@ -46,7 +46,14 @@ test("runs profiles migration idempotently and persists repository data", async 
     await expect(repository.findById(profile.id)).resolves.toBeNull();
     await expect(repository.create(profile)).resolves.toEqual(profile);
     await expect(repository.findById(profile.id)).resolves.toEqual(profile);
-    await expect(repository.list({ limit: 50, offset: 0 })).resolves.toEqual([profile]);
+    await expect(
+      repository.list({
+        limit: 50,
+        offset: 0,
+        sortBy: "createdAt",
+        sortOrder: "asc",
+      }),
+    ).resolves.toEqual([profile]);
     await expect(
       repository.create({ ...profile, id: "profile-empty", displayName: "" }),
     ).rejects.toThrow();
@@ -89,6 +96,50 @@ test("rejects a duplicate profile id at the SQLite boundary", async () => {
     await expect(
       sql`select count(*) as count from profiles`.execute(database),
     ).resolves.toMatchObject({ rows: [{ count: 1 }] });
+  } finally {
+    owner.close();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("filters by display name and applies an allowlisted sort", async () => {
+  const tempRoot = await fs.mkdtemp(join(tmpdir(), "antidetect-profile-query-"));
+  const paths = resolveAppPaths({
+    env: { ANTIDETECT_HOME: join(tempRoot, "app") },
+  });
+  await ensureAppRootDirectories(paths);
+
+  const owner = acquireRootOwnership(paths.databasePath);
+  const database = createAppDatabase(owner);
+
+  try {
+    await runMigrations(database);
+    const repository = new SqliteProfileRepository(database);
+    await repository.create({
+      ...profile,
+      id: "profile-001",
+      displayName: "Alpha",
+    });
+    await repository.create({
+      ...profile,
+      id: "profile-002",
+      displayName: "Beta",
+    });
+    await repository.create({
+      ...profile,
+      id: "profile-003",
+      displayName: "Zeta",
+    });
+
+    await expect(
+      repository.list({
+        limit: 10,
+        offset: 0,
+        search: "et",
+        sortBy: "displayName",
+        sortOrder: "desc",
+      }),
+    ).resolves.toMatchObject([{ displayName: "Zeta" }, { displayName: "Beta" }]);
   } finally {
     owner.close();
     await fs.rm(tempRoot, { recursive: true, force: true });

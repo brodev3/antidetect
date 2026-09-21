@@ -3,6 +3,10 @@ import { z } from "zod";
 export const PROFILE_DISPLAY_NAME_MAX_LENGTH = 100;
 export const PROFILE_LIST_DEFAULT_LIMIT = 50;
 export const PROFILE_LIST_MAX_LIMIT = 100;
+export const PROFILE_LIST_DEFAULT_SORT_BY = "createdAt" as const;
+export const PROFILE_LIST_DEFAULT_SORT_ORDER = "asc" as const;
+export const PROFILE_LIST_SORT_BY_VALUES = ["createdAt", "displayName"] as const;
+export const PROFILE_LIST_SORT_ORDER_VALUES = ["asc", "desc"] as const;
 
 export const profileIdSchema = z.uuid();
 
@@ -40,6 +44,11 @@ export const listProfilesQuerySchema = z
       .pipe(z.number().min(1).max(PROFILE_LIST_MAX_LIMIT))
       .default(PROFILE_LIST_DEFAULT_LIMIT),
     offset: safeQueryIntegerSchema.default(0),
+    search: z.string().trim().max(PROFILE_DISPLAY_NAME_MAX_LENGTH).optional(),
+    sortBy: z.enum(PROFILE_LIST_SORT_BY_VALUES).default(PROFILE_LIST_DEFAULT_SORT_BY),
+    sortOrder: z
+      .enum(PROFILE_LIST_SORT_ORDER_VALUES)
+      .default(PROFILE_LIST_DEFAULT_SORT_ORDER),
   })
   .refine(({ limit, offset }) => Number.isSafeInteger(limit + offset), {
     message: "Offset and limit exceed the safe integer range",

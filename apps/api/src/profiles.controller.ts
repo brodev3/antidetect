@@ -11,7 +11,11 @@ import {
   listProfilesQuerySchema,
   listProfilesResponseSchema,
   PROFILE_LIST_DEFAULT_LIMIT,
+  PROFILE_LIST_DEFAULT_SORT_BY,
+  PROFILE_LIST_DEFAULT_SORT_ORDER,
   PROFILE_LIST_MAX_LIMIT,
+  PROFILE_LIST_SORT_BY_VALUES,
+  PROFILE_LIST_SORT_ORDER_VALUES,
   profilePathParamsSchema,
   profileResponseSchema,
   type ListProfilesResponse,
@@ -57,10 +61,40 @@ export class ProfilesController {
     maximum: Number.MAX_SAFE_INTEGER,
     default: 0,
   })
+  @ApiQuery({
+    name: "search",
+    required: false,
+    type: String,
+    maxLength: 100,
+  })
+  @ApiQuery({
+    name: "sortBy",
+    required: false,
+    schema: {
+      type: "string",
+      enum: [...PROFILE_LIST_SORT_BY_VALUES],
+      default: PROFILE_LIST_DEFAULT_SORT_BY,
+    },
+  })
+  @ApiQuery({
+    name: "sortOrder",
+    required: false,
+    schema: {
+      type: "string",
+      enum: [...PROFILE_LIST_SORT_ORDER_VALUES],
+      default: PROFILE_LIST_DEFAULT_SORT_ORDER,
+    },
+  })
   @ApiBadRequestResponse({ type: ApiErrorDto })
   @ZodResponse({ status: 200, type: ListProfilesResponseDto })
   async list(@Query() query: ListProfilesQueryDto): Promise<ListProfilesResponse> {
-    const result = await this.profileService.list(query);
+    const result = await this.profileService.list({
+      limit: query.limit,
+      offset: query.offset,
+      search: query.search,
+      sortBy: query.sortBy,
+      sortOrder: query.sortOrder,
+    });
 
     return {
       items: [...result.items],

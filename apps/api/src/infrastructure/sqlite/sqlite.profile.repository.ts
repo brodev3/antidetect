@@ -3,6 +3,7 @@ import type {
   ProfileListOptions,
   ProfileRepository,
 } from "../../application/profiles/profile.repository.js";
+import { sql } from "kysely";
 import type { AppDatabase, ProfilesTable } from "./app.database.js";
 
 function toProfile(row: ProfilesTable): Profile {
@@ -43,11 +44,27 @@ export class SqliteProfileRepository implements ProfileRepository {
     return row === undefined ? null : toProfile(row);
   }
 
-  async list({ limit, offset }: ProfileListOptions): Promise<readonly Profile[]> {
-    const rows = await this.database
-      .selectFrom("profiles")
-      .selectAll()
-      .orderBy("created_at", "asc")
+  async list({
+    limit,
+    offset,
+    search,
+    sortBy,
+    sortOrder,
+  }: ProfileListOptions): Promise<readonly Profile[]> {
+    let query = this.database.selectFrom("profiles").selectAll();
+    const normalizedSearch = search?.trim();
+
+    if (normalizedSearch !== undefined && normalizedSearch.length > 0) {
+      query = query.where(
+        sql<boolean>`instr(lower(display_name), lower(${normalizedSearch})) > 0`,
+      );
+    }
+
+    const orderedQuery =
+      sortBy === "displayName"
+        ? query.orderBy("display_name", sortOrder)
+        : query.orderBy("created_at", sortOrder);
+    const rows = await orderedQuery
       .orderBy("id", "asc")
       .limit(limit)
       .offset(offset)

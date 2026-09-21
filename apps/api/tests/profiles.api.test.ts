@@ -29,8 +29,10 @@ interface ProfileAppFixture {
 
 interface OpenApiParameter {
   readonly name: string;
+  readonly default?: number | string;
   readonly schema?: {
-    readonly default?: number;
+    readonly default?: number | string;
+    readonly enum?: readonly string[];
     readonly maximum?: number;
     readonly minimum?: number;
   };
@@ -189,6 +191,19 @@ test("returns a bounded and stably ordered profile list", async () => {
     expect(secondPageResponse.statusCode).toBe(200);
     expect(secondPage.items.map(({ id }) => id)).toEqual([profiles[0].id]);
     expect(secondPage.nextOffset).toBeNull();
+
+    const searchedResponse = await fixture.app.getHttpAdapter().getInstance().inject({
+      method: "GET",
+      url: "/profiles?search=ir&sortBy=displayName&sortOrder=desc&limit=10",
+      headers: requestHeaders,
+    });
+    expect(searchedResponse.statusCode, searchedResponse.body).toBe(200);
+    const searchedProfiles = listProfilesResponseSchema.parse(searchedResponse.json());
+    expect(searchedProfiles.items.map(({ displayName }) => displayName)).toEqual([
+      "Third",
+      "First",
+    ]);
+    expect(searchedProfiles.nextOffset).toBeNull();
   } finally {
     await closeProfileApp(fixture);
     await fs.rm(tempRoot, { recursive: true, force: true });
@@ -218,6 +233,11 @@ test("maps validation and not-found failures to stable public errors", async () 
       fixture.app.getHttpAdapter().getInstance().inject({
         method: "GET",
         url: "/profiles?limit=101",
+        headers: requestHeaders,
+      }),
+      fixture.app.getHttpAdapter().getInstance().inject({
+        method: "GET",
+        url: "/profiles?sortBy=id",
         headers: requestHeaders,
       }),
     ]);
@@ -260,7 +280,14 @@ test("maps validation and not-found failures to stable public errors", async () 
       });
 
     expect(forbiddenResponse.statusCode).toBe(403);
-    await expect(fixture.repository.list({ limit: 1, offset: 0 })).resolves.toEqual([]);
+    await expect(
+      fixture.repository.list({
+        limit: 1,
+        offset: 0,
+        sortBy: "createdAt",
+        sortOrder: "asc",
+      }),
+    ).resolves.toEqual([]);
   } finally {
     await closeProfileApp(fixture);
     await fs.rm(tempRoot, { recursive: true, force: true });
@@ -286,6 +313,15 @@ test("documents profile routes and explicit pagination limits", async () => {
     const offsetParameter = profilesPath?.get?.parameters?.find(
       ({ name }) => name === "offset",
     );
+    const searchParameter = profilesPath?.get?.parameters?.find(
+      ({ name }) => name === "search",
+    );
+    const sortByParameter = profilesPath?.get?.parameters?.find(
+      ({ name }) => name === "sortBy",
+    );
+    const sortOrderParameter = profilesPath?.get?.parameters?.find(
+      ({ name }) => name === "sortOrder",
+    );
 
     expect(response.statusCode).toBe(200);
     expect(profilesPath?.post?.responses["201"]).toBeDefined();
@@ -304,6 +340,15 @@ test("documents profile routes and explicit pagination limits", async () => {
       default: 0,
       maximum: Number.MAX_SAFE_INTEGER,
       minimum: 0,
+    });
+    expect(searchParameter?.schema).toMatchObject({ maxLength: 100 });
+    expect(sortByParameter?.schema).toMatchObject({
+      default: "createdAt",
+      enum: ["createdAt", "displayName"],
+    });
+    expect(sortOrderParameter?.schema).toMatchObject({
+      default: "asc",
+      enum: ["asc", "desc"],
     });
   } finally {
     await closeProfileApp(fixture);

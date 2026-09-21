@@ -66,21 +66,42 @@ describe("profile response contracts", () => {
 
 describe("listProfilesQuerySchema", () => {
   test("applies bounded defaults", () => {
-    expect(listProfilesQuerySchema.parse({})).toEqual({ limit: 50, offset: 0 });
+    expect(listProfilesQuerySchema.parse({})).toEqual({
+      limit: 50,
+      offset: 0,
+      sortBy: "createdAt",
+      sortOrder: "asc",
+    });
   });
 
   test.each([
     [
       { limit: "1", offset: "0" },
-      { limit: 1, offset: 0 },
+      { limit: 1, offset: 0, sortBy: "createdAt", sortOrder: "asc" },
     ],
     [
       { limit: "100", offset: "250" },
-      { limit: 100, offset: 250 },
+      { limit: 100, offset: 250, sortBy: "createdAt", sortOrder: "asc" },
     ],
     [
       { limit: 25, offset: 10 },
-      { limit: 25, offset: 10 },
+      { limit: 25, offset: 10, sortBy: "createdAt", sortOrder: "asc" },
+    ],
+    [
+      {
+        limit: "10",
+        offset: "0",
+        search: "  research ",
+        sortBy: "displayName",
+        sortOrder: "desc",
+      },
+      {
+        limit: 10,
+        offset: 0,
+        search: "research",
+        sortBy: "displayName",
+        sortOrder: "desc",
+      },
     ],
   ] as const)("normalizes valid query values", (input, expected) => {
     expect(listProfilesQuerySchema.parse(input)).toEqual(expected);
@@ -97,6 +118,9 @@ describe("listProfilesQuerySchema", () => {
     { offset: "01" },
     { offset: "9007199254740992" },
     { limit: "100", offset: "9007199254740900" },
+    { search: "a".repeat(PROFILE_DISPLAY_NAME_MAX_LENGTH + 1) },
+    { sortBy: "id" },
+    { sortOrder: "sideways" },
     { extra: "field" },
   ])("rejects an invalid or unbounded query", (value) => {
     expect(listProfilesQuerySchema.safeParse(value).success).toBe(false);

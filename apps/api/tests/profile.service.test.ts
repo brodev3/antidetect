@@ -65,14 +65,43 @@ test("requests one extra row and calculates the next offset", async () => {
   );
   const service = new ProfileService(repository);
 
-  await expect(service.list({ limit: 2, offset: 0 })).resolves.toEqual({
+  await expect(
+    service.list({
+      limit: 2,
+      offset: 0,
+      search: undefined,
+      sortBy: "createdAt",
+      sortOrder: "asc",
+    }),
+  ).resolves.toEqual({
     items: repository.profiles.slice(0, 2),
     nextOffset: 2,
   });
-  expect(repository.lastListOptions).toEqual({ limit: 3, offset: 0 });
+  expect(repository.lastListOptions).toEqual({
+    limit: 3,
+    offset: 0,
+    search: undefined,
+    sortBy: "createdAt",
+    sortOrder: "asc",
+  });
 
-  await expect(service.list({ limit: 2, offset: 2 })).resolves.toEqual({
+  await expect(
+    service.list({
+      limit: 2,
+      offset: 2,
+      search: "first",
+      sortBy: "displayName",
+      sortOrder: "desc",
+    }),
+  ).resolves.toEqual({
     items: repository.profiles.slice(2),
     nextOffset: null,
+  });
+  expect(repository.lastListOptions).toEqual({
+    limit: 3,
+    offset: 2,
+    search: "first",
+    sortBy: "displayName",
+    sortOrder: "desc",
   });
 });
