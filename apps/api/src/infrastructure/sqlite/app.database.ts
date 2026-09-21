@@ -9,10 +9,16 @@ export interface SchemaMigrationsTable {
 
 export interface ProfilesTable {
   id: string;
+  profile_code: string;
   display_name: string;
   identity_ref: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProfileCodeSequenceTable {
+  id: number;
+  next_value: number;
 }
 
 export interface BrowserRunsTable {
@@ -30,6 +36,7 @@ export interface BrowserRunsTable {
 export interface AppDatabaseSchema {
   schema_migrations: SchemaMigrationsTable;
   profiles: ProfilesTable;
+  profile_code_sequence: ProfileCodeSequenceTable;
   browser_runs: BrowserRunsTable;
 }
 

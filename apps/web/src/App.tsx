@@ -77,6 +77,7 @@ const DEFAULT_PROFILE_SORT: ProfileSort = {
 
 type DemoProfile = {
   id: string;
+  profileCode: string;
   name: string;
   tags: ProfileTagId[];
   status: ProfileLifecycleStatus;
@@ -98,7 +99,8 @@ type DemoProfile = {
 
 const demoProfiles: DemoProfile[] = [
   {
-    id: "profile-001",
+    id: "00000000-0000-4000-8000-000000000001",
+    profileCode: "profile-001",
     name: "Work profile",
     tags: ["work", "primary", "manual", "review", "client-a", "qa"],
     status: "stopped",
@@ -117,7 +119,8 @@ const demoProfiles: DemoProfile[] = [
     },
   },
   {
-    id: "profile-002",
+    id: "00000000-0000-4000-8000-000000000002",
+    profileCode: "profile-002",
     name: "Research profile",
     tags: ["research", "manual"],
     status: "running",
@@ -140,7 +143,8 @@ const demoProfiles: DemoProfile[] = [
     },
   },
   {
-    id: "profile-003",
+    id: "00000000-0000-4000-8000-000000000003",
+    profileCode: "profile-003",
     name: "Testing profile",
     tags: ["testing", "qa"],
     status: "starting",
@@ -163,7 +167,8 @@ const demoProfiles: DemoProfile[] = [
     },
   },
   {
-    id: "profile-004",
+    id: "00000000-0000-4000-8000-000000000004",
+    profileCode: "profile-004",
     name: "Campaign profile",
     tags: ["campaign", "client-a"],
     status: "stopping",
@@ -186,7 +191,8 @@ const demoProfiles: DemoProfile[] = [
     },
   },
   {
-    id: "profile-005",
+    id: "00000000-0000-4000-8000-000000000005",
+    profileCode: "profile-005",
     name: "Setup profile",
     tags: ["new", "review"],
     status: "stopped",
@@ -205,7 +211,8 @@ const demoProfiles: DemoProfile[] = [
     },
   },
   {
-    id: "profile-006",
+    id: "00000000-0000-4000-8000-000000000006",
+    profileCode: "profile-006",
     name: "Recovery profile",
     tags: ["support", "priority"],
     status: "stopped",
@@ -227,7 +234,8 @@ const demoProfiles: DemoProfile[] = [
     },
   },
   {
-    id: "profile-007",
+    id: "00000000-0000-4000-8000-000000000007",
+    profileCode: "profile-007",
     name: "Failed launch",
     tags: ["testing", "retry"],
     status: "failed",
@@ -725,6 +733,7 @@ export function App() {
 
       return [
         profile.id,
+        profile.profileCode,
         profile.name,
         ...profile.tags.map((tagId) => demoTagCatalog[tagId].label),
         profile.status,
@@ -1053,7 +1062,7 @@ export function App() {
                     </span>
                     <div className="profile-entry__cell profile-entry__profile">
                       <strong className="profile-entry__name">{profile.name}</strong>
-                      <span className="profile-entry__id">{profile.id}</span>
+                      <span className="profile-entry__id">{profile.profileCode}</span>
                     </div>
 
                     <div
@@ -1307,7 +1316,7 @@ export function App() {
                   <h2 id="proxy-details-title">Proxy details</h2>
                   <p className="proxy-details-panel__profile">
                     {selectedProxyProfile.name}
-                    <span>{selectedProxyProfile.id}</span>
+                    <span>{selectedProxyProfile.profileCode}</span>
                   </p>
                 </div>
                 <button

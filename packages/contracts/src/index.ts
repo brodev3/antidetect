@@ -9,6 +9,8 @@ export {
   createProfileRequestSchema,
   listProfilesQuerySchema,
   listProfilesResponseSchema,
+  profileCodeSchema,
+  PROFILE_CODE_MAX_LENGTH,
   PROFILE_DISPLAY_NAME_MAX_LENGTH,
   PROFILE_LIST_DEFAULT_LIMIT,
   PROFILE_LIST_DEFAULT_SORT_BY,

@@ -11,6 +11,7 @@ import {
 
 const profile = {
   id: "550e8400-e29b-41d4-a716-446655440000",
+  profileCode: "profile-001",
   displayName: "Research profile",
   identityRef: "test-identity:550e8400-e29b-41d4-a716-446655440000",
   createdAt: "2026-09-20T10:00:00.000Z",

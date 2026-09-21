@@ -21,6 +21,11 @@ const profile = {
   updatedAt: timestamp,
 } as const;
 
+const migratedProfile = {
+  ...profile,
+  profileCode: "profile-001",
+} as const;
+
 async function withDatabase(
   callback: (database: AppDatabase) => Promise<void>,
 ): Promise<void> {
@@ -53,7 +58,10 @@ async function prepareVersionOne(database: AppDatabase): Promise<void> {
     .insertInto("schema_migrations")
     .values({ version: 1, name: "create_profiles", applied_at: timestamp })
     .execute();
-  await new SqliteProfileRepository(database).create(profile);
+  await sql`
+    INSERT INTO profiles (id, display_name, identity_ref, created_at, updated_at)
+    VALUES (${profile.id}, ${profile.displayName}, ${profile.identityRef}, ${profile.createdAt}, ${profile.updatedAt})
+  `.execute(database);
 }
 
 test("upgrades the previous schema without losing profiles", async () => {
@@ -67,10 +75,10 @@ test("upgrades the previous schema without losing profiles", async () => {
       .select("version")
       .orderBy("version")
       .execute();
-    expect(applied).toEqual([{ version: 1 }, { version: 2 }]);
+    expect(applied).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
     await expect(
       new SqliteProfileRepository(database).findById(profile.id),
-    ).resolves.toEqual(profile);
+    ).resolves.toEqual(migratedProfile);
     await expect(
       database.selectFrom("browser_runs").selectAll().execute(),
     ).resolves.toEqual([]);
@@ -93,8 +101,10 @@ test("rejects a newer schema before applying pending migrations", async () => {
       database.selectFrom("schema_migrations").selectAll().execute(),
     ).resolves.toEqual(before);
     await expect(
-      new SqliteProfileRepository(database).findById(profile.id),
-    ).resolves.toEqual(profile);
+      sql`SELECT id, display_name AS displayName, identity_ref AS identityRef, created_at AS createdAt, updated_at AS updatedAt FROM profiles WHERE id = ${profile.id}`.execute(
+        database,
+      ),
+    ).resolves.toMatchObject({ rows: [profile] });
     const tables =
       await sql`SELECT name FROM sqlite_schema WHERE name = 'browser_runs'`.execute(
         database,
@@ -154,8 +164,10 @@ test("rolls back schema changes when recording a migration fails and allows retr
       database.selectFrom("schema_migrations").select("version").execute(),
     ).resolves.toEqual([{ version: 1 }]);
     await expect(
-      new SqliteProfileRepository(database).findById(profile.id),
-    ).resolves.toEqual(profile);
+      sql`SELECT id, display_name AS displayName, identity_ref AS identityRef, created_at AS createdAt, updated_at AS updatedAt FROM profiles WHERE id = ${profile.id}`.execute(
+        database,
+      ),
+    ).resolves.toMatchObject({ rows: [profile] });
 
     await sql`DROP TRIGGER fail_migration_record`.execute(database);
     await expect(runMigrations(database)).resolves.toBeUndefined();

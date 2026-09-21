@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import { ProfileNotFoundError } from "../src/application/profiles/profile.errors.ts";
 import type {
   Profile,
+  ProfileDraft,
   ProfileListOptions,
   ProfileRepository,
 } from "../src/application/profiles/profile.repository.ts";
@@ -10,10 +11,16 @@ import { ProfileService } from "../src/application/profiles/profile.service.ts";
 class InMemoryProfileRepository implements ProfileRepository {
   readonly profiles: Profile[] = [];
   lastListOptions: ProfileListOptions | undefined;
+  private nextProfileCode = 1;
 
-  async create(profile: Profile): Promise<Profile> {
-    this.profiles.push(profile);
-    return profile;
+  async create(profile: ProfileDraft): Promise<Profile> {
+    const createdProfile: Profile = {
+      ...profile,
+      profileCode: `profile-${String(this.nextProfileCode).padStart(3, "0")}`,
+    };
+    this.nextProfileCode += 1;
+    this.profiles.push(createdProfile);
+    return createdProfile;
   }
 
   async findById(id: string): Promise<Profile | null> {
@@ -28,6 +35,7 @@ class InMemoryProfileRepository implements ProfileRepository {
 
 const firstProfile: Profile = {
   id: "00000000-0000-4000-8000-000000000001",
+  profileCode: "profile-001",
   displayName: "First",
   identityRef: "test-identity:00000000-0000-4000-8000-000000000001",
   createdAt: "2026-09-21T00:00:00.000Z",

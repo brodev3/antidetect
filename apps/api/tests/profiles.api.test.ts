@@ -107,6 +107,7 @@ test("creates a profile and reads it after reopening the database", async () => 
     expect(createResponse.statusCode).toBe(201);
     createdProfile = profileResponseSchema.parse(createResponse.json());
     expect(createdProfile).toMatchObject({
+      profileCode: "profile-001",
       displayName: "Research profile",
       identityRef: `test-identity:${createdProfile.id}`,
     });

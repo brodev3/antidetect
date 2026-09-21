@@ -12,6 +12,7 @@ import { acquireRootOwnership } from "../src/infrastructure/sqlite/root.ownershi
 
 const profile = {
   id: "profile-001",
+  profileCode: "profile-001",
   displayName: "Research profile",
   identityRef: "identity-001",
   createdAt: "2026-09-15T10:00:00.000Z",
@@ -36,10 +37,11 @@ test("runs profiles migration idempotently and persists repository data", async 
       .selectFrom("schema_migrations")
       .selectAll()
       .execute();
-    expect(migrations).toHaveLength(2);
+    expect(migrations).toHaveLength(3);
     expect(migrations.map((migration) => migration.name)).toEqual([
       "create_profiles",
       "create_browser_runs",
+      "add_profile_codes",
     ]);
 
     const repository = new SqliteProfileRepository(firstDatabase);
@@ -96,6 +98,33 @@ test("rejects a duplicate profile id at the SQLite boundary", async () => {
     await expect(
       sql`select count(*) as count from profiles`.execute(database),
     ).resolves.toMatchObject({ rows: [{ count: 1 }] });
+  } finally {
+    owner.close();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("allocates stable sequential profile codes", async () => {
+  const tempRoot = await fs.mkdtemp(join(tmpdir(), "antidetect-profile-code-"));
+  const paths = resolveAppPaths({
+    env: { ANTIDETECT_HOME: join(tempRoot, "app") },
+  });
+  await ensureAppRootDirectories(paths);
+
+  const owner = acquireRootOwnership(paths.databasePath);
+  const database = createAppDatabase(owner);
+
+  try {
+    await runMigrations(database);
+    const repository = new SqliteProfileRepository(database);
+    const first = await repository.create({ ...profile, id: "profile-code-1" });
+    const second = await repository.create({ ...profile, id: "profile-code-2" });
+
+    expect(first.profileCode).toBe("profile-001");
+    expect(second.profileCode).toBe("profile-002");
+    await expect(repository.findById(second.id)).resolves.toMatchObject({
+      profileCode: "profile-002",
+    });
   } finally {
     owner.close();
     await fs.rm(tempRoot, { recursive: true, force: true });

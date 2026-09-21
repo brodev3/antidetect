@@ -1,5 +1,6 @@
 import { sql, type Kysely } from "kysely";
 import type { AppDatabase, AppDatabaseSchema } from "../app.database.js";
+import { addProfileCodesMigration } from "./003-add-profile-codes.js";
 import { createBrowserRunsMigration } from "./002-create-browser-runs.js";
 import { createProfilesMigration } from "./001-create-profiles.js";
 
@@ -12,6 +13,7 @@ export interface Migration {
 const migrations: readonly Migration[] = [
   createProfilesMigration,
   createBrowserRunsMigration,
+  addProfileCodesMigration,
 ];
 
 export class IncompatibleDatabaseSchemaError extends Error {

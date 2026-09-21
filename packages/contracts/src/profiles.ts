@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const PROFILE_DISPLAY_NAME_MAX_LENGTH = 100;
+export const PROFILE_CODE_MAX_LENGTH = 32;
 export const PROFILE_LIST_DEFAULT_LIMIT = 50;
 export const PROFILE_LIST_MAX_LIMIT = 100;
 export const PROFILE_LIST_DEFAULT_SORT_BY = "createdAt" as const;
@@ -9,9 +10,14 @@ export const PROFILE_LIST_SORT_BY_VALUES = ["createdAt", "displayName"] as const
 export const PROFILE_LIST_SORT_ORDER_VALUES = ["asc", "desc"] as const;
 
 export const profileIdSchema = z.uuid();
+export const profileCodeSchema = z
+  .string()
+  .regex(/^profile-\d+$/)
+  .max(PROFILE_CODE_MAX_LENGTH);
 
 export const profileResponseSchema = z.strictObject({
   id: profileIdSchema,
+  profileCode: profileCodeSchema,
   displayName: z.string().min(1).max(PROFILE_DISPLAY_NAME_MAX_LENGTH),
   identityRef: z.string().min(1).max(200),
   createdAt: z.iso.datetime({ offset: true }),
