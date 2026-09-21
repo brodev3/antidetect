@@ -1582,6 +1582,10 @@ h1 {
 }
 
 .profile-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
   padding: 40px 16px;
   color: var(--color-muted);
   text-align: center;

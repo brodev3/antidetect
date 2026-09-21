@@ -1,4 +1,6 @@
 import * as React from "react";
+import type { ProfileResponse } from "@antidetect/contracts";
+import { fetchProfiles } from "./api/profiles";
 
 type ProfileLifecycleStatus =
   "running" | "stopped" | "starting" | "stopping" | "failed";
@@ -96,6 +98,11 @@ type DemoProfile = {
     latencyMs: number | null;
   };
 };
+
+type ProfileLoadState =
+  | { readonly status: "loading" }
+  | { readonly status: "ready"; readonly profiles: readonly DemoProfile[] }
+  | { readonly status: "error"; readonly message: string };
 
 const demoProfiles: DemoProfile[] = [
   {
@@ -257,6 +264,29 @@ const demoProfiles: DemoProfile[] = [
     },
   },
 ];
+
+function mapApiProfile(profile: ProfileResponse): DemoProfile {
+  return {
+    id: profile.id,
+    profileCode: profile.profileCode,
+    name: profile.displayName,
+    tags: [],
+    status: "stopped",
+    readiness: "setup_required",
+    lastRunAt: null,
+    identity: {
+      platform: "Identity pending",
+    },
+    network: {
+      address: null,
+      country: null,
+      protocol: null,
+      type: "Direct",
+      health: "not_configured",
+      latencyMs: null,
+    },
+  };
+}
 
 function getDisplayStatus(profile: DemoProfile): ProfileDisplayStatus {
   if (profile.status === "failed") {
@@ -699,6 +729,10 @@ export function App() {
   >({});
   const [selectedProxyProfile, setSelectedProxyProfile] =
     React.useState<DemoProfile | null>(null);
+  const [profileLoadState, setProfileLoadState] = React.useState<ProfileLoadState>({
+    status: "loading",
+  });
+  const [profileReloadAttempt, setProfileReloadAttempt] = React.useState(0);
   const profileRegistryRef = React.useRef<HTMLElement | null>(null);
   const [profileRegistryScroll, setProfileRegistryScroll] = React.useState({
     hasLeftOverflow: false,
@@ -714,14 +748,52 @@ export function App() {
       // The UI still works when browser storage is unavailable.
     }
   }, [theme]);
-  const runningProfileCount = demoProfiles.filter(
+  const demoMode =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).has("demo");
+
+  React.useEffect(() => {
+    if (demoMode) {
+      setProfileLoadState({ status: "ready", profiles: demoProfiles });
+      return;
+    }
+
+    const controller = new AbortController();
+    setProfileLoadState({ status: "loading" });
+
+    void fetchProfiles(controller.signal)
+      .then((items) => {
+        setProfileLoadState({
+          status: "ready",
+          profiles: items.map(mapApiProfile),
+        });
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setProfileLoadState({
+          status: "error",
+          message:
+            error instanceof Error && error.message.length > 0
+              ? error.message
+              : "Unable to load profiles",
+        });
+      });
+
+    return () => controller.abort();
+  }, [demoMode, profileReloadAttempt]);
+
+  const profiles = profileLoadState.status === "ready" ? profileLoadState.profiles : [];
+  const runningProfileCount = profiles.filter(
     (profile) => profile.status === "running",
   ).length;
-  const configuredProxyCount = demoProfiles.filter(
+  const configuredProxyCount = profiles.filter(
     (profile) => profile.network.address !== null,
   ).length;
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
-  const visibleProfiles = demoProfiles
+  const visibleProfiles = profiles
     .filter((profile) => {
       if (statusFilter !== "all" && getDisplayStatus(profile) !== statusFilter) {
         return false;
@@ -861,7 +933,7 @@ export function App() {
           >
             <span>Profiles</span>
             <span className="sidebar-nav__count">
-              {String(demoProfiles.length).padStart(2, "0")}
+              {String(profiles.length).padStart(2, "0")}
             </span>
           </a>
           <a className="sidebar-nav__item" href="#proxies">
@@ -914,7 +986,7 @@ export function App() {
           <dl aria-label="Profile summary" className="profile-stats">
             <div className="profile-stat">
               <dt>All</dt>
-              <dd>{String(demoProfiles.length).padStart(2, "0")}</dd>
+              <dd>{String(profiles.length).padStart(2, "0")}</dd>
             </div>
             <div className="profile-stat profile-stat--running">
               <dt>Running</dt>
@@ -964,7 +1036,11 @@ export function App() {
             <option value="failed">Failed</option>
           </select>
           <span aria-live="polite" className="profile-tools__count">
-            {visibleProfiles.length} shown
+            {profileLoadState.status === "loading"
+              ? "Loading…"
+              : profileLoadState.status === "error"
+                ? "Unavailable"
+                : `${visibleProfiles.length} shown`}
           </span>
           {hasActiveViewOptions ? (
             <button
@@ -1039,7 +1115,22 @@ export function App() {
           </div>
 
           <ol aria-label="Browser profiles" className="profile-list">
-            {visibleProfiles.length > 0 ? (
+            {profileLoadState.status === "loading" ? (
+              <li aria-live="polite" className="profile-empty">
+                Loading profiles…
+              </li>
+            ) : profileLoadState.status === "error" ? (
+              <li aria-live="assertive" className="profile-empty" role="alert">
+                <span>{profileLoadState.message}</span>{" "}
+                <button
+                  className="button button--secondary"
+                  onClick={() => setProfileReloadAttempt((current) => current + 1)}
+                  type="button"
+                >
+                  Retry
+                </button>
+              </li>
+            ) : visibleProfiles.length > 0 ? (
               visibleProfiles.map((profile, index) => {
                 const displayStatus = getDisplayStatus(profile);
                 const proxyHealth =

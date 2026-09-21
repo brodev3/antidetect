@@ -81,6 +81,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@antidetect/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       react:
         specifier: ^19.1.1
         version: 19.2.8

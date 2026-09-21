@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@antidetect/contracts": "workspace:*",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
