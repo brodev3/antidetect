@@ -1,13 +1,16 @@
 import { healthResponseSchema } from "@antidetect/contracts";
 import { expect, test } from "vitest";
 import { buildApp } from "../src/app.ts";
+import { createProfileRepositoryStub } from "./support/profile.repository.stub.ts";
 
 const requestHeaders = {
   host: "127.0.0.1:3000",
 };
 
 test("GET /health returns the API health status", async () => {
-  const app = await buildApp();
+  const app = await buildApp({
+    profileRepository: createProfileRepositoryStub(),
+  });
 
   try {
     const response = await app.getHttpAdapter().getInstance().inject({
@@ -26,7 +29,9 @@ test("GET /health returns the API health status", async () => {
 });
 
 test("OpenAPI documents the health endpoint", async () => {
-  const app = await buildApp();
+  const app = await buildApp({
+    profileRepository: createProfileRepositoryStub(),
+  });
 
   try {
     const response = await app.getHttpAdapter().getInstance().inject({

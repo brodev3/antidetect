@@ -3,17 +3,24 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import { cleanupOpenApiDoc } from "nestjs-zod";
 import { AppModule } from "./app.module.js";
+import type { ProfileRepository } from "./application/profiles/profile.repository.js";
 import {
   DEFAULT_API_SERVER_CONFIG,
   type ApiServerConfig,
 } from "./config/api.server.js";
 import { registerApiRequestPolicy } from "./infrastructure/http/api.request.policy.js";
 
-export async function buildApp(
-  config: ApiServerConfig = DEFAULT_API_SERVER_CONFIG,
-): Promise<NestFastifyApplication> {
+export interface BuildAppOptions {
+  readonly profileRepository: ProfileRepository;
+  readonly config?: ApiServerConfig;
+}
+
+export async function buildApp({
+  profileRepository,
+  config = DEFAULT_API_SERVER_CONFIG,
+}: BuildAppOptions): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(
-    AppModule,
+    AppModule.register(profileRepository),
     new FastifyAdapter({ logger: false }),
     { logger: false },
   );

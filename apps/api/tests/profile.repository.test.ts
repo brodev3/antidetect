@@ -46,7 +46,7 @@ test("runs profiles migration idempotently and persists repository data", async 
     await expect(repository.findById(profile.id)).resolves.toBeNull();
     await expect(repository.create(profile)).resolves.toEqual(profile);
     await expect(repository.findById(profile.id)).resolves.toEqual(profile);
-    await expect(repository.list()).resolves.toEqual([profile]);
+    await expect(repository.list({ limit: 50, offset: 0 })).resolves.toEqual([profile]);
     await expect(
       repository.create({ ...profile, id: "profile-empty", displayName: "" }),
     ).rejects.toThrow();

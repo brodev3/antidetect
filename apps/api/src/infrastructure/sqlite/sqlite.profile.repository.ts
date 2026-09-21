@@ -1,5 +1,6 @@
 import type {
   Profile,
+  ProfileListOptions,
   ProfileRepository,
 } from "../../application/profiles/profile.repository.js";
 import type { AppDatabase, ProfilesTable } from "./app.database.js";
@@ -42,12 +43,14 @@ export class SqliteProfileRepository implements ProfileRepository {
     return row === undefined ? null : toProfile(row);
   }
 
-  async list(): Promise<readonly Profile[]> {
+  async list({ limit, offset }: ProfileListOptions): Promise<readonly Profile[]> {
     const rows = await this.database
       .selectFrom("profiles")
       .selectAll()
       .orderBy("created_at", "asc")
       .orderBy("id", "asc")
+      .limit(limit)
+      .offset(offset)
       .execute();
 
     return rows.map(toProfile);

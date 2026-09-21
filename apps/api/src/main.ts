@@ -14,6 +14,7 @@ import {
 import { runMigrations } from "./infrastructure/sqlite/migrations/migration.runner.js";
 import { acquireRootOwnership } from "./infrastructure/sqlite/root.ownership.js";
 import { SqliteBrowserRunRepository } from "./infrastructure/sqlite/sqlite.browser.run.repository.js";
+import { SqliteProfileRepository } from "./infrastructure/sqlite/sqlite.profile.repository.js";
 
 const { host, port } = readApiServerConfig();
 
@@ -31,7 +32,10 @@ try {
   );
   recoveryBarrier.assertReady(await recoveryBarrier.inspect());
   await ensurePostOwnershipDirectories(appPaths);
-  const app = await buildApp({ host, port });
+  const app = await buildApp({
+    config: { host, port },
+    profileRepository: new SqliteProfileRepository(appDatabase),
+  });
   runtime = createApiRuntime(app, rootOwnership);
 
   await app.listen({ host, port });

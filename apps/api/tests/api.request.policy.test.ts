@@ -1,12 +1,15 @@
 import { expect, test } from "vitest";
 import { buildApp } from "../src/app.ts";
+import { createProfileRepositoryStub } from "./support/profile.repository.stub.ts";
 
 const validHost = "127.0.0.1:3000";
 
 async function request(
   headers: Record<string, string> = { host: validHost },
 ): Promise<{ statusCode: number; json: () => unknown }> {
-  const app = await buildApp();
+  const app = await buildApp({
+    profileRepository: createProfileRepositoryStub(),
+  });
 
   try {
     const response = await app.getHttpAdapter().getInstance().inject({

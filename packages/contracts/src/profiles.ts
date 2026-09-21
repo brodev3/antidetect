@@ -34,12 +34,17 @@ const safeQueryIntegerSchema = queryIntegerSchema.pipe(
   z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
 );
 
-export const listProfilesQuerySchema = z.strictObject({
-  limit: safeQueryIntegerSchema
-    .pipe(z.number().min(1).max(PROFILE_LIST_MAX_LIMIT))
-    .default(PROFILE_LIST_DEFAULT_LIMIT),
-  offset: safeQueryIntegerSchema.default(0),
-});
+export const listProfilesQuerySchema = z
+  .strictObject({
+    limit: safeQueryIntegerSchema
+      .pipe(z.number().min(1).max(PROFILE_LIST_MAX_LIMIT))
+      .default(PROFILE_LIST_DEFAULT_LIMIT),
+    offset: safeQueryIntegerSchema.default(0),
+  })
+  .refine(({ limit, offset }) => Number.isSafeInteger(limit + offset), {
+    message: "Offset and limit exceed the safe integer range",
+    path: ["offset"],
+  });
 
 export const listProfilesResponseSchema = z.strictObject({
   items: z.array(profileResponseSchema),

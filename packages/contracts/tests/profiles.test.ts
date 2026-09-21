@@ -96,6 +96,7 @@ describe("listProfilesQuerySchema", () => {
     { offset: "1.5" },
     { offset: "01" },
     { offset: "9007199254740992" },
+    { limit: "100", offset: "9007199254740900" },
     { extra: "field" },
   ])("rejects an invalid or unbounded query", (value) => {
     expect(listProfilesQuerySchema.safeParse(value).success).toBe(false);
