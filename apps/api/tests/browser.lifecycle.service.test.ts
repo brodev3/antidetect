@@ -95,6 +95,7 @@ class MemoryProfileRepository implements ProfileRepository {
 
 class MemoryBrowserRunRepository implements BrowserRunRepository {
   private readonly runs = new Map<string, BrowserRun>();
+  failNextSave: Error | null = null;
 
   async create(run: BrowserRun): Promise<BrowserRun> {
     const active = await this.findActiveByProfileId(run.profileId);
@@ -131,6 +132,11 @@ class MemoryBrowserRunRepository implements BrowserRunRepository {
   }
 
   async save(run: BrowserRun): Promise<BrowserRun> {
+    if (this.failNextSave !== null) {
+      const error = this.failNextSave;
+      this.failNextSave = null;
+      throw error;
+    }
     if (!this.runs.has(run.id)) {
       throw new Error(`Run not found: ${run.id}`);
     }
@@ -834,6 +840,58 @@ describe("BrowserLifecycleService", () => {
         failureCode: "RUNTIME_UNEXPECTED_EXIT",
       });
     });
+  });
+
+  test("recovers by run id when process metadata persistence fails after spawn", async () => {
+    const profiles = new MemoryProfileRepository();
+    const runs = new MemoryBrowserRunRepository();
+    const processHost = new FakeBrowserProcessHost();
+    const firstRuntime = new FakeBrowserRuntime({ processHost });
+    const first = createService(firstRuntime, profiles, runs);
+
+    runs.failNextSave = new Error("Simulated process metadata persistence failure");
+    await expect(first.service.start(firstProfile.id)).resolves.toMatchObject({
+      id: "run-1",
+      status: "starting",
+    });
+    await waitForBackgroundTasks(first.service);
+
+    expect(runs.all()).toMatchObject([
+      {
+        id: "run-1",
+        status: "starting",
+        processPid: null,
+        processIdentity: null,
+      },
+    ]);
+    expect(firstRuntime.activeProcesses()).toHaveLength(1);
+
+    processHost.simulateApiProcessExit();
+    const restartedRuntime = new FakeBrowserRuntime({ processHost });
+    const restarted = createService(restartedRuntime, profiles, runs);
+
+    await expect(restarted.service.recoverPersistedRuns()).resolves.toMatchObject([
+      {
+        id: "run-1",
+        status: "running",
+        processPid: 10_000,
+        processIdentity: "profile-001:run-1:fake-process-001",
+        failureCode: null,
+      },
+    ]);
+    expect(restartedRuntime.recoveryCalls).toEqual([
+      {
+        runId: "run-1",
+        profileId: firstProfile.id,
+        processPid: null,
+        processIdentity: null,
+      },
+    ]);
+    await expect(restarted.service.start(firstProfile.id)).rejects.toMatchObject({
+      code: "ACTIVE_BROWSER_RUN_CONFLICT",
+    });
+    expect(restartedRuntime.launchCalls).toEqual([]);
+    expect(restartedRuntime.activeProcesses()).toHaveLength(1);
   });
 
   test("marks a process failed when its owned exit is observed during API downtime", async () => {
