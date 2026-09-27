@@ -24,6 +24,7 @@ const profile = {
 const migratedProfile = {
   ...profile,
   profileCode: "profile-001",
+  fingerprintEnabled: true,
 } as const;
 
 async function withDatabase(
@@ -56,7 +57,11 @@ async function prepareVersionOne(database: AppDatabase): Promise<void> {
   await createProfilesMigration.up(database);
   await database
     .insertInto("schema_migrations")
-    .values({ version: 1, name: "create_profiles", applied_at: timestamp })
+    .values({
+      version: createProfilesMigration.version,
+      name: createProfilesMigration.name,
+      applied_at: timestamp,
+    })
     .execute();
   await sql`
     INSERT INTO profiles (id, display_name, identity_ref, created_at, updated_at)
@@ -64,7 +69,7 @@ async function prepareVersionOne(database: AppDatabase): Promise<void> {
   `.execute(database);
 }
 
-test("upgrades the previous schema without losing profiles", async () => {
+test("applies pending migrations without losing profiles", async () => {
   await withDatabase(async (database) => {
     await prepareVersionOne(database);
     await runMigrations(database);
@@ -82,6 +87,48 @@ test("upgrades the previous schema without losing profiles", async () => {
     await expect(
       database.selectFrom("browser_runs").selectAll().execute(),
     ).resolves.toEqual([]);
+  });
+});
+
+test("supports profiles without fingerprints and rejects inconsistent settings", async () => {
+  await withDatabase(async (database) => {
+    await runMigrations(database);
+    await sql`
+      INSERT INTO profiles (
+        id, display_name, identity_ref, fingerprint_enabled, created_at, updated_at
+      ) VALUES (
+        'no-fingerprint-profile', 'No fingerprint', NULL, 0, ${timestamp}, ${timestamp}
+      )
+    `.execute(database);
+
+    await expect(
+      sql`
+        SELECT identity_ref, fingerprint_enabled
+        FROM profiles
+        WHERE id = 'no-fingerprint-profile'
+      `.execute(database),
+    ).resolves.toMatchObject({
+      rows: [{ identity_ref: null, fingerprint_enabled: 0 }],
+    });
+
+    await expect(
+      sql`
+        INSERT INTO profiles (
+          id, display_name, identity_ref, fingerprint_enabled, created_at, updated_at
+        ) VALUES (
+          'missing-identity-profile', 'Missing identity', NULL, 1, ${timestamp}, ${timestamp}
+        )
+      `.execute(database),
+    ).rejects.toThrow();
+    await expect(
+      sql`
+        INSERT INTO profiles (
+          id, display_name, identity_ref, fingerprint_enabled, created_at, updated_at
+        ) VALUES (
+          'invalid-fingerprint-state', 'Invalid state', 'test-identity', 2, ${timestamp}, ${timestamp}
+        )
+      `.execute(database),
+    ).rejects.toThrow();
   });
 });
 
@@ -114,6 +161,11 @@ test("rejects a newer schema before applying pending migrations", async () => {
 });
 
 test.each([
+  {
+    label: "previous initial schema",
+    version: 1,
+    name: "create_profiles",
+  },
   { label: "renamed", version: 1, name: "unexpected_name" },
   { label: "incomplete", version: 2, name: "create_browser_runs" },
 ])(

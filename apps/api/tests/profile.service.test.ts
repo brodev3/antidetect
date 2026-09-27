@@ -3,6 +3,7 @@ import { ProfileNotFoundError } from "../src/application/profiles/profile.errors
 import type {
   Profile,
   ProfileDraft,
+  ProfileFingerprintSettings,
   ProfileListOptions,
   ProfileRepository,
 } from "../src/application/profiles/profile.repository.ts";
@@ -27,6 +28,19 @@ class InMemoryProfileRepository implements ProfileRepository {
     return this.profiles.find((profile) => profile.id === id) ?? null;
   }
 
+  async updateFingerprintSettings(
+    id: string,
+    settings: ProfileFingerprintSettings,
+  ): Promise<Profile | null> {
+    const index = this.profiles.findIndex((profile) => profile.id === id);
+    const profile = this.profiles[index];
+    if (profile === undefined) return null;
+
+    const updatedProfile = { ...profile, ...settings };
+    this.profiles[index] = updatedProfile;
+    return updatedProfile;
+  }
+
   async list(options: ProfileListOptions): Promise<readonly Profile[]> {
     this.lastListOptions = options;
     return this.profiles.slice(options.offset, options.offset + options.limit);
@@ -37,6 +51,7 @@ const firstProfile: Profile = {
   id: "00000000-0000-4000-8000-000000000001",
   profileCode: "profile-001",
   displayName: "First",
+  fingerprintEnabled: true,
   identityRef: "test-identity:00000000-0000-4000-8000-000000000001",
   createdAt: "2026-09-21T00:00:00.000Z",
   updatedAt: "2026-09-21T00:00:00.000Z",
@@ -49,8 +64,25 @@ test("creates server-owned profile fields", async () => {
     now: () => firstProfile.createdAt,
   });
 
-  await expect(service.create({ displayName: "First" })).resolves.toEqual(firstProfile);
+  await expect(
+    service.create({ displayName: "First", fingerprintEnabled: true }),
+  ).resolves.toEqual(firstProfile);
   expect(repository.profiles).toEqual([firstProfile]);
+});
+
+test("creates a profile without assigning a fingerprint reference", async () => {
+  const repository = new InMemoryProfileRepository();
+  const service = new ProfileService(repository, {
+    createId: () => firstProfile.id,
+    now: () => firstProfile.createdAt,
+  });
+
+  await expect(
+    service.create({ displayName: "Direct", fingerprintEnabled: false }),
+  ).resolves.toMatchObject({
+    fingerprintEnabled: false,
+    identityRef: null,
+  });
 });
 
 test("returns a profile or a typed not-found error", async () => {

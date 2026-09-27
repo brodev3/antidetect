@@ -11,7 +11,8 @@ export interface ProfilesTable {
   id: string;
   profile_code: string;
   display_name: string;
-  identity_ref: string;
+  fingerprint_enabled: number;
+  identity_ref: string | null;
   created_at: string;
   updated_at: string;
 }

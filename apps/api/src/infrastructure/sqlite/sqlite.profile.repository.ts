@@ -1,6 +1,7 @@
 import type {
   Profile,
   ProfileDraft,
+  ProfileFingerprintSettings,
   ProfileListOptions,
   ProfileRepository,
 } from "../../application/profiles/profile.repository.js";
@@ -12,6 +13,7 @@ function toProfile(row: ProfilesTable): Profile {
     id: row.id,
     profileCode: row.profile_code,
     displayName: row.display_name,
+    fingerprintEnabled: row.fingerprint_enabled === 1,
     identityRef: row.identity_ref,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -50,6 +52,7 @@ export class SqliteProfileRepository implements ProfileRepository {
           id: createdProfile.id,
           profile_code: createdProfile.profileCode,
           display_name: createdProfile.displayName,
+          fingerprint_enabled: createdProfile.fingerprintEnabled ? 1 : 0,
           identity_ref: createdProfile.identityRef,
           created_at: createdProfile.createdAt,
           updated_at: createdProfile.updatedAt,
@@ -65,6 +68,24 @@ export class SqliteProfileRepository implements ProfileRepository {
       .selectFrom("profiles")
       .selectAll()
       .where("id", "=", id)
+      .executeTakeFirst();
+
+    return row === undefined ? null : toProfile(row);
+  }
+
+  async updateFingerprintSettings(
+    id: string,
+    settings: ProfileFingerprintSettings,
+  ): Promise<Profile | null> {
+    const row = await this.database
+      .updateTable("profiles")
+      .set({
+        fingerprint_enabled: settings.fingerprintEnabled ? 1 : 0,
+        identity_ref: settings.identityRef,
+        updated_at: settings.updatedAt,
+      })
+      .where("id", "=", id)
+      .returningAll()
       .executeTakeFirst();
 
     return row === undefined ? null : toProfile(row);

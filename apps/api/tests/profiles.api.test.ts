@@ -19,7 +19,10 @@ import {
   type RootOwnership,
 } from "../src/infrastructure/sqlite/root.ownership.ts";
 
-const requestHeaders = { host: "127.0.0.1:3000" };
+const requestHeaders = {
+  host: "127.0.0.1:3000",
+  origin: "http://127.0.0.1:3000",
+};
 
 interface ProfileAppFixture {
   readonly app: NestFastifyApplication;
@@ -125,11 +128,12 @@ test("creates a profile and reads it after reopening the database", async () => 
         payload: { displayName: "  Research profile  " },
       });
 
-    expect(createResponse.statusCode).toBe(201);
+    expect(createResponse.statusCode, createResponse.body).toBe(201);
     createdProfile = profileResponseSchema.parse(createResponse.json());
     expect(createdProfile).toMatchObject({
       profileCode: "profile-001",
       displayName: "Research profile",
+      fingerprintEnabled: true,
       identityRef: `test-identity:${createdProfile.id}`,
     });
   } finally {
@@ -156,6 +160,53 @@ test("creates a profile and reads it after reopening the database", async () => 
   }
 });
 
+test("creates and persists a profile without a fingerprint", async () => {
+  const { paths, tempRoot } = await createTestPaths(
+    "antidetect-profile-no-fingerprint-api-",
+  );
+  const firstFixture = await openProfileApp(paths);
+  let createdProfile: ReturnType<typeof profileResponseSchema.parse>;
+
+  try {
+    const response = await firstFixture.app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "POST",
+        url: "/profiles",
+        headers: firstFixture.requestHeaders,
+        payload: { displayName: "Direct profile", fingerprintEnabled: false },
+      });
+
+    expect(response.statusCode, response.body).toBe(201);
+    createdProfile = profileResponseSchema.parse(response.json());
+    expect(createdProfile).toMatchObject({
+      fingerprintEnabled: false,
+      identityRef: null,
+    });
+  } finally {
+    await closeProfileApp(firstFixture);
+  }
+
+  const secondFixture = await openProfileApp(paths);
+
+  try {
+    const response = await secondFixture.app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: `/profiles/${createdProfile.id}`,
+        headers: secondFixture.requestHeaders,
+      });
+
+    expect(profileResponseSchema.parse(response.json())).toEqual(createdProfile);
+  } finally {
+    await closeProfileApp(secondFixture);
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("returns a bounded and stably ordered profile list", async () => {
   const { paths, tempRoot } = await createTestPaths("antidetect-profile-list-api-");
   const fixture = await openProfileApp(paths);
@@ -164,6 +215,7 @@ test("returns a bounded and stably ordered profile list", async () => {
     {
       id: "00000000-0000-4000-8000-000000000003",
       displayName: "Third",
+      fingerprintEnabled: true,
       identityRef: "test-identity:00000000-0000-4000-8000-000000000003",
       createdAt: "2026-09-21T02:00:00.000Z",
       updatedAt: "2026-09-21T02:00:00.000Z",
@@ -171,6 +223,7 @@ test("returns a bounded and stably ordered profile list", async () => {
     {
       id: "00000000-0000-4000-8000-000000000002",
       displayName: "Second",
+      fingerprintEnabled: true,
       identityRef: "test-identity:00000000-0000-4000-8000-000000000002",
       createdAt: firstTimestamp,
       updatedAt: firstTimestamp,
@@ -178,6 +231,7 @@ test("returns a bounded and stably ordered profile list", async () => {
     {
       id: "00000000-0000-4000-8000-000000000001",
       displayName: "First",
+      fingerprintEnabled: true,
       identityRef: "test-identity:00000000-0000-4000-8000-000000000001",
       createdAt: firstTimestamp,
       updatedAt: firstTimestamp,
@@ -194,6 +248,7 @@ test("returns a bounded and stably ordered profile list", async () => {
       url: "/profiles?limit=2&offset=0",
       headers: fixture.requestHeaders,
     });
+    expect(firstPageResponse.statusCode, firstPageResponse.body).toBe(200);
     const firstPage = listProfilesResponseSchema.parse(firstPageResponse.json());
 
     expect(firstPageResponse.statusCode).toBe(200);

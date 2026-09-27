@@ -12,6 +12,9 @@ export function createProfileRepositoryStub(): ProfileRepository {
     async findById(): Promise<Profile | null> {
       return null;
     },
+    async updateFingerprintSettings(): Promise<Profile | null> {
+      return null;
+    },
     async list(): Promise<readonly Profile[]> {
       return [];
     },

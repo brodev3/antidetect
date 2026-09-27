@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import { resolveAppPaths } from "../src/config/app.paths.ts";
 import { ensureAppRootDirectories } from "../src/infrastructure/filesystem/app.directories.ts";
 import { createAppDatabase } from "../src/infrastructure/sqlite/app.database.ts";
+import { createProfilesMigration } from "../src/infrastructure/sqlite/migrations/001-create-profiles.ts";
 import { runMigrations } from "../src/infrastructure/sqlite/migrations/migration.runner.ts";
 import { SqliteProfileRepository } from "../src/infrastructure/sqlite/sqlite.profile.repository.ts";
 import { acquireRootOwnership } from "../src/infrastructure/sqlite/root.ownership.ts";
@@ -14,6 +15,7 @@ const profile = {
   id: "profile-001",
   profileCode: "profile-001",
   displayName: "Research profile",
+  fingerprintEnabled: true,
   identityRef: "identity-001",
   createdAt: "2026-09-15T10:00:00.000Z",
   updatedAt: "2026-09-15T10:00:00.000Z",
@@ -28,6 +30,10 @@ test("runs profiles migration idempotently and persists repository data", async 
 
   const firstOwner = acquireRootOwnership(paths.databasePath);
   const firstDatabase = createAppDatabase(firstOwner);
+  const expectedReenabledProfile = {
+    ...profile,
+    updatedAt: "2026-09-24T10:00:00.000Z",
+  };
 
   try {
     await runMigrations(firstDatabase);
@@ -39,7 +45,7 @@ test("runs profiles migration idempotently and persists repository data", async 
       .execute();
     expect(migrations).toHaveLength(3);
     expect(migrations.map((migration) => migration.name)).toEqual([
-      "create_profiles",
+      createProfilesMigration.name,
       "create_browser_runs",
       "add_profile_codes",
     ]);
@@ -47,7 +53,29 @@ test("runs profiles migration idempotently and persists repository data", async 
     const repository = new SqliteProfileRepository(firstDatabase);
     await expect(repository.findById(profile.id)).resolves.toBeNull();
     await expect(repository.create(profile)).resolves.toEqual(profile);
-    await expect(repository.findById(profile.id)).resolves.toEqual(profile);
+    const disabledProfile = await repository.updateFingerprintSettings(profile.id, {
+      fingerprintEnabled: false,
+      identityRef: profile.identityRef,
+      updatedAt: "2026-09-23T10:00:00.000Z",
+    });
+    expect(disabledProfile).toEqual({
+      ...profile,
+      fingerprintEnabled: false,
+      updatedAt: "2026-09-23T10:00:00.000Z",
+    });
+    const reenabledProfile = await repository.updateFingerprintSettings(profile.id, {
+      fingerprintEnabled: true,
+      identityRef: profile.identityRef,
+      updatedAt: "2026-09-24T10:00:00.000Z",
+    });
+    expect(reenabledProfile).toEqual(expectedReenabledProfile);
+    await expect(
+      repository.updateFingerprintSettings("missing", {
+        fingerprintEnabled: false,
+        identityRef: null,
+        updatedAt: "2026-09-25T10:00:00.000Z",
+      }),
+    ).resolves.toBeNull();
     await expect(
       repository.list({
         limit: 50,
@@ -55,7 +83,7 @@ test("runs profiles migration idempotently and persists repository data", async 
         sortBy: "createdAt",
         sortOrder: "asc",
       }),
-    ).resolves.toEqual([profile]);
+    ).resolves.toEqual([expectedReenabledProfile]);
     await expect(
       repository.create({ ...profile, id: "profile-empty", displayName: "" }),
     ).rejects.toThrow();
@@ -70,7 +98,7 @@ test("runs profiles migration idempotently and persists repository data", async 
     await runMigrations(secondDatabase);
     await expect(
       new SqliteProfileRepository(secondDatabase).findById(profile.id),
-    ).resolves.toEqual(profile);
+    ).resolves.toEqual(expectedReenabledProfile);
   } finally {
     secondOwner.close();
     await fs.rm(tempRoot, { recursive: true, force: true });

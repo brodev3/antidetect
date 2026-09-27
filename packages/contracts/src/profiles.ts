@@ -15,17 +15,32 @@ export const profileCodeSchema = z
   .regex(/^profile-\d+$/)
   .max(PROFILE_CODE_MAX_LENGTH);
 
-export const profileResponseSchema = z.strictObject({
-  id: profileIdSchema,
-  profileCode: profileCodeSchema,
-  displayName: z.string().min(1).max(PROFILE_DISPLAY_NAME_MAX_LENGTH),
-  identityRef: z.string().min(1).max(200),
-  createdAt: z.iso.datetime({ offset: true }),
-  updatedAt: z.iso.datetime({ offset: true }),
-});
+export const profileResponseSchema = z
+  .strictObject({
+    id: profileIdSchema,
+    profileCode: profileCodeSchema,
+    displayName: z.string().min(1).max(PROFILE_DISPLAY_NAME_MAX_LENGTH),
+    fingerprintEnabled: z.boolean(),
+    identityRef: z.string().min(1).max(200).nullable(),
+    createdAt: z.iso.datetime({ offset: true }),
+    updatedAt: z.iso.datetime({ offset: true }),
+  })
+  .refine(
+    ({ fingerprintEnabled, identityRef }) =>
+      !fingerprintEnabled || identityRef !== null,
+    {
+      message: "An enabled fingerprint requires an identity reference",
+      path: ["identityRef"],
+    },
+  );
 
 export const createProfileRequestSchema = z.strictObject({
   displayName: z.string().trim().min(1).max(PROFILE_DISPLAY_NAME_MAX_LENGTH),
+  fingerprintEnabled: z.boolean().default(true),
+});
+
+export const updateProfileFingerprintModeRequestSchema = z.strictObject({
+  fingerprintEnabled: z.boolean(),
 });
 
 export const profilePathParamsSchema = z.strictObject({
@@ -67,7 +82,10 @@ export const listProfilesResponseSchema = z.strictObject({
 });
 
 export type ProfileResponse = z.infer<typeof profileResponseSchema>;
-export type CreateProfileRequest = z.infer<typeof createProfileRequestSchema>;
+export type CreateProfileRequest = z.input<typeof createProfileRequestSchema>;
+export type UpdateProfileFingerprintModeRequest = z.infer<
+  typeof updateProfileFingerprintModeRequestSchema
+>;
 export type ProfilePathParams = z.infer<typeof profilePathParamsSchema>;
 export type ListProfilesQuery = z.infer<typeof listProfilesQuerySchema>;
 export type ListProfilesResponse = z.infer<typeof listProfilesResponseSchema>;

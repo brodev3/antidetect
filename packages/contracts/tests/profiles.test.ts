@@ -7,12 +7,14 @@ import {
   PROFILE_DISPLAY_NAME_MAX_LENGTH,
   profilePathParamsSchema,
   profileResponseSchema,
+  updateProfileFingerprintModeRequestSchema,
 } from "../src/profiles.ts";
 
 const profile = {
   id: "550e8400-e29b-41d4-a716-446655440000",
   profileCode: "profile-001",
   displayName: "Research profile",
+  fingerprintEnabled: true,
   identityRef: "test-identity:550e8400-e29b-41d4-a716-446655440000",
   createdAt: "2026-09-20T10:00:00.000Z",
   updatedAt: "2026-09-20T10:00:00.000Z",
@@ -24,7 +26,17 @@ describe("createProfileRequestSchema", () => {
       createProfileRequestSchema.parse({ displayName: "  Research profile  " }),
     ).toEqual({
       displayName: "Research profile",
+      fingerprintEnabled: true,
     });
+  });
+
+  test("accepts an explicit no-fingerprint choice", () => {
+    expect(
+      createProfileRequestSchema.parse({
+        displayName: "Research profile",
+        fingerprintEnabled: false,
+      }),
+    ).toEqual({ displayName: "Research profile", fingerprintEnabled: false });
   });
 
   test.each([
@@ -38,6 +50,26 @@ describe("createProfileRequestSchema", () => {
   });
 });
 
+describe("updateProfileFingerprintModeRequestSchema", () => {
+  test.each([true, false])("accepts fingerprintEnabled=%s", (enabled) => {
+    expect(
+      updateProfileFingerprintModeRequestSchema.parse({
+        fingerprintEnabled: enabled,
+      }),
+    ).toEqual({ fingerprintEnabled: enabled });
+  });
+
+  test.each([
+    {},
+    { fingerprintEnabled: "false" },
+    { fingerprintEnabled: false, identityRef: "client-selected-identity" },
+  ])("rejects a missing, invalid, or client-selected identity", (value) => {
+    expect(updateProfileFingerprintModeRequestSchema.safeParse(value).success).toBe(
+      false,
+    );
+  });
+});
+
 describe("profile response contracts", () => {
   test("accepts a strict profile response", () => {
     expect(profileResponseSchema.parse(profile)).toEqual(profile);
@@ -46,10 +78,23 @@ describe("profile response contracts", () => {
     ).toEqual({ items: [profile], nextOffset: 50 });
   });
 
+  test("accepts a profile without an assigned fingerprint", () => {
+    const profileWithoutFingerprint = {
+      ...profile,
+      fingerprintEnabled: false,
+      identityRef: null,
+    };
+
+    expect(profileResponseSchema.parse(profileWithoutFingerprint)).toEqual(
+      profileWithoutFingerprint,
+    );
+  });
+
   test.each([
     { ...profile, id: "not-a-uuid" },
     { ...profile, createdAt: "20 September 2026" },
     { ...profile, identityRef: "" },
+    { ...profile, identityRef: null },
     { ...profile, internalState: "must not cross the boundary" },
   ])("rejects an invalid profile response", (value) => {
     expect(profileResponseSchema.safeParse(value).success).toBe(false);

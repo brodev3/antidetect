@@ -9,6 +9,7 @@ import type {
 
 export interface CreateProfileInput {
   readonly displayName: string;
+  readonly fingerprintEnabled: boolean;
 }
 
 export interface ListProfilesInput {
@@ -47,7 +48,8 @@ export class ProfileService {
     return this.repository.create({
       id,
       displayName: input.displayName,
-      identityRef: `test-identity:${id}`,
+      fingerprintEnabled: input.fingerprintEnabled,
+      identityRef: input.fingerprintEnabled ? `test-identity:${id}` : null,
       createdAt: timestamp,
       updatedAt: timestamp,
     });
