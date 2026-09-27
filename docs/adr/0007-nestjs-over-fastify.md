@@ -6,7 +6,7 @@
 
 ## Контекст
 
-Phase 1 содержит минимальную NestJS/Fastify-основу: `/health`, Zod response contract и Vitest integration test через `inject()`. В Phase 2 уже добавлены application ports, SQLite persistence и базовый browser-run lifecycle-сервис, но product modules/routes ещё не подключены. Поэтому смена API-каркаса по-прежнему не требует миграции product HTTP-логики.
+На момент ранней реализации Phase 1 содержала минимальную NestJS/Fastify-основу: `/health`, Zod response contract и Vitest integration test через `inject()`. Затем добавились application ports, SQLite persistence, profile routes и отдельный тестовый browser-run API slice. Это решение о границе framework не меняется от добавления product modules/routes и не требует миграции их HTTP-логики.
 
 Целевой control plane будет включать profiles, browser lifecycle, runtime adapters, persistence, events, API и UI boundary. Проект одновременно служит практическим учебным и портфельным примером, поэтому важно показать не только HTTP route, но и осознанное применение modules, dependency injection — внедрения зависимостей — и test overrides — тестовых подмен.
 
