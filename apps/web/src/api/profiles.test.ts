@@ -1,10 +1,16 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { createProfile, fetchProfiles } from "./profiles";
+import {
+  createProfile,
+  fetchProfiles,
+  ProfileApiError,
+  updateProfileFingerprintMode,
+} from "./profiles";
 
 const profile = {
   id: "550e8400-e29b-41d4-a716-446655440000",
   profileCode: "profile-001",
   displayName: "Research profile",
+  fingerprintEnabled: true,
   identityRef: "test-identity:550e8400-e29b-41d4-a716-446655440000",
   createdAt: "2026-09-21T10:00:00.000Z",
   updatedAt: "2026-09-21T10:00:00.000Z",
@@ -78,7 +84,10 @@ test("creates a profile through the shared contract", async () => {
   expect(fetchMock).toHaveBeenCalledWith(
     "/api/profiles",
     expect.objectContaining({
-      body: JSON.stringify({ displayName: "Research profile" }),
+      body: JSON.stringify({
+        displayName: "Research profile",
+        fingerprintEnabled: true,
+      }),
       headers: {
         accept: "application/json",
         "content-type": "application/json",
@@ -115,4 +124,69 @@ test("does not send an invalid create request and handles create failures", asyn
     "Profile API returned an invalid response",
   );
   expect(fetchMock).toHaveBeenCalledTimes(4);
+});
+
+test("updates fingerprint mode through the shared profile contract", async () => {
+  const disabledProfile = {
+    ...profile,
+    fingerprintEnabled: false,
+    updatedAt: "2026-09-26T10:00:00.000Z",
+  };
+  const fetchMock = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(disabledProfile), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      }),
+    );
+  globalThis.fetch = fetchMock;
+
+  await expect(updateProfileFingerprintMode(profile.id, false)).resolves.toEqual(
+    disabledProfile,
+  );
+  expect(fetchMock).toHaveBeenNthCalledWith(
+    1,
+    "/api/session",
+    expect.objectContaining({ credentials: "include" }),
+  );
+  expect(fetchMock).toHaveBeenNthCalledWith(
+    2,
+    `/api/profiles/${profile.id}/fingerprint`,
+    expect.objectContaining({
+      body: JSON.stringify({ fingerprintEnabled: false }),
+      credentials: "include",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      method: "PATCH",
+    }),
+  );
+});
+
+test("exposes the busy-profile conflict from fingerprint update", async () => {
+  globalThis.fetch = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "ACTIVE_BROWSER_RUN_CONFLICT",
+            message: "Profile already has an active browser run",
+          },
+        }),
+        {
+          headers: { "content-type": "application/json" },
+          status: 409,
+        },
+      ),
+    );
+
+  await expect(updateProfileFingerprintMode(profile.id, false)).rejects.toMatchObject({
+    code: "ACTIVE_BROWSER_RUN_CONFLICT",
+    statusCode: 409,
+  } satisfies Partial<ProfileApiError>);
 });

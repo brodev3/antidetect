@@ -1,20 +1,31 @@
 import * as React from "react";
 import {
   PROFILE_DISPLAY_NAME_MAX_LENGTH,
+  type BrowserRunResponse,
   type ProfileResponse,
 } from "@antidetect/contracts";
-import { createProfile, fetchProfiles } from "./api/profiles";
+import {
+  BrowserRunApiError,
+  fetchBrowserRunState,
+  startBrowserRun,
+  stopBrowserRun,
+} from "./api/browser.runs";
+import {
+  createProfile,
+  fetchProfiles,
+  ProfileApiError,
+  updateProfileFingerprintMode,
+} from "./api/profiles";
 
 type ProfileLifecycleStatus =
   "running" | "stopped" | "starting" | "stopping" | "failed";
-type ProfileReadiness = "ready" | "unknown" | "setup_required" | "recovery_required";
+type ProfileReadiness = "ready" | "unknown" | "recovery_required";
 type ProfileDisplayStatus =
   | "ready"
   | "running"
   | "starting"
   | "stopping"
   | "unknown"
-  | "setup_required"
   | "recovery_required"
   | "failed";
 type ProxyHealth = "reachable" | "checking" | "unreachable" | "not_configured";
@@ -86,6 +97,7 @@ type DemoProfile = {
   profileCode: string;
   name: string;
   tags: ProfileTagId[];
+  fingerprintEnabled?: boolean;
   status: ProfileLifecycleStatus;
   statusElapsedSeconds?: number;
   readiness: ProfileReadiness;
@@ -107,6 +119,14 @@ type ProfileLoadState =
   | { readonly status: "loading" }
   | { readonly status: "ready"; readonly profiles: readonly DemoProfile[] }
   | { readonly status: "error"; readonly message: string };
+type ProfileRunLoadState =
+  | { readonly status: "loading" }
+  | { readonly status: "ready"; readonly run: BrowserRunResponse | null }
+  | { readonly status: "error" };
+
+const RUN_STATE_HYDRATION_CONCURRENCY = 6;
+const MAX_RUN_STATE_REFRESH_ATTEMPTS = 8;
+const RUN_STATE_REFRESH_INTERVAL_MS = 250;
 
 const demoProfiles: DemoProfile[] = [
   {
@@ -202,26 +222,6 @@ const demoProfiles: DemoProfile[] = [
     },
   },
   {
-    id: "00000000-0000-4000-8000-000000000005",
-    profileCode: "profile-005",
-    name: "Setup profile",
-    tags: ["new", "review"],
-    status: "stopped",
-    readiness: "setup_required",
-    lastRunAt: null,
-    identity: {
-      platform: "Win 11 / en-US",
-    },
-    network: {
-      address: null,
-      country: null,
-      protocol: null,
-      type: "Direct",
-      health: "not_configured",
-      latencyMs: null,
-    },
-  },
-  {
     id: "00000000-0000-4000-8000-000000000006",
     profileCode: "profile-006",
     name: "Recovery profile",
@@ -278,8 +278,9 @@ function mapApiProfile(profile: ProfileResponse): DemoProfile {
     status: "stopped",
     readiness: "unknown",
     lastRunAt: null,
+    fingerprintEnabled: profile.fingerprintEnabled,
     identity: {
-      platform: "Pending",
+      platform: profile.fingerprintEnabled ? "Pending" : "No fingerprint",
     },
     network: {
       address: null,
@@ -304,6 +305,59 @@ function getDisplayStatus(profile: DemoProfile): ProfileDisplayStatus {
   return profile.status === "stopped" ? "ready" : profile.status;
 }
 
+function getFakeRuntimeDisplayStatus(
+  runState: ProfileRunLoadState | undefined,
+): ProfileDisplayStatus {
+  if (runState === undefined || runState.status !== "ready") {
+    return "unknown";
+  }
+
+  if (runState.run === null || runState.run.status === "stopped") {
+    return "ready";
+  }
+
+  return runState.run.status;
+}
+
+function isRunTransitioning(run: BrowserRunResponse | null): boolean {
+  return run?.status === "starting" || run?.status === "stopping";
+}
+
+function getBrowserRunErrorMessage(error: unknown): string {
+  if (!(error instanceof BrowserRunApiError)) {
+    return "Unable to reach the FakeBrowserRuntime test API.";
+  }
+
+  switch (error.code) {
+    case "PROFILE_NOT_FOUND":
+      return "This test profile no longer exists.";
+    case "ACTIVE_BROWSER_RUN_CONFLICT":
+    case "BROWSER_RUN_START_IN_PROGRESS":
+      return "The run changed before the command completed. The latest state was requested.";
+    case "BROWSER_RUNTIME_LAUNCH_FAILED":
+      return "The fake browser launch failed.";
+    case "BROWSER_RUNTIME_RECOVERY_REQUIRED":
+      return "Recovery is required; this profile remains unavailable.";
+    case "BROWSER_RUNTIME_STOP_FAILED":
+      return "The fake browser stop failed.";
+    default:
+      return "Unable to complete the FakeBrowserRuntime request.";
+  }
+}
+
+function getFingerprintModeErrorMessage(error: unknown): string {
+  if (error instanceof ProfileApiError) {
+    if (error.code === "ACTIVE_BROWSER_RUN_CONFLICT") {
+      return "Stop this profile before changing its fingerprint.";
+    }
+    if (error.code === "PROFILE_NOT_FOUND") {
+      return "This profile no longer exists. Reload the profile list.";
+    }
+  }
+
+  return "Unable to update fingerprint settings. Try again.";
+}
+
 function formatStatus(status: ProfileDisplayStatus): string {
   const labels: Record<ProfileDisplayStatus, string> = {
     ready: "Ready",
@@ -311,7 +365,6 @@ function formatStatus(status: ProfileDisplayStatus): string {
     starting: "Starting",
     stopping: "Stopping",
     unknown: "Unknown",
-    setup_required: "Setup required",
     recovery_required: "Recovery required",
     failed: "Failed",
   };
@@ -337,7 +390,6 @@ function formatStatusMeta(profile: DemoProfile, status: ProfileDisplayStatus): s
     starting: "initializing",
     stopping: "closing session",
     unknown: "not provided by API",
-    setup_required: "fingerprint missing",
     recovery_required: "interrupted run",
     failed: "last launch failed",
   };
@@ -397,6 +449,20 @@ function PlatformIcon({ platform }: { platform: string }) {
       <circle cx="6.9" cy="4.75" r="0.25" />
       <circle cx="9.1" cy="4.75" r="0.25" />
       <path className="profile-identity__linux-beak" d="m7.2 5.7.8-.45.8.45-.8.7Z" />
+    </svg>
+  );
+}
+
+function NoFingerprintIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="profile-identity__platform-icon profile-identity__platform-icon--outline"
+      fill="none"
+      viewBox="0 0 16 16"
+    >
+      <circle cx="8" cy="8" r="5.5" />
+      <path d="m4 4 8 8" />
     </svg>
   );
 }
@@ -511,10 +577,6 @@ function getActionLabel(status: ProfileDisplayStatus): string {
     return "Unavailable";
   }
 
-  if (status === "setup_required") {
-    return "Configure";
-  }
-
   if (status === "recovery_required") {
     return "Resolve";
   }
@@ -533,22 +595,6 @@ function ProfileActionIcon({ status }: { status: ProfileDisplayStatus }) {
 
   if (status === "failed" || status === "recovery_required" || status === "unknown") {
     return null;
-  }
-
-  if (status === "setup_required") {
-    return (
-      <svg
-        aria-hidden="true"
-        className="profile-action__icon"
-        fill="none"
-        viewBox="0 0 16 16"
-      >
-        <path d="M3 4h10M3 8h10M3 12h10" />
-        <circle cx="6" cy="4" r="1.25" />
-        <circle cx="10" cy="8" r="1.25" />
-        <circle cx="7.5" cy="12" r="1.25" />
-      </svg>
-    );
   }
 
   if (status === "starting" || status === "stopping") {
@@ -628,6 +674,7 @@ function compareProfiles(
   left: DemoProfile,
   right: DemoProfile,
   sort: ProfileSort,
+  getStatus: (profile: DemoProfile) => ProfileDisplayStatus = getDisplayStatus,
 ): number {
   if (sort.key === "default") {
     return 0;
@@ -649,8 +696,8 @@ function compareProfiles(
     return sort.direction === "asc" ? result : -result;
   }
 
-  const leftValue = getProfileSortValue(left, sort.key);
-  const rightValue = getProfileSortValue(right, sort.key);
+  const leftValue = getProfileSortValue(left, sort.key, getStatus(left));
+  const rightValue = getProfileSortValue(right, sort.key, getStatus(right));
   const result = leftValue.localeCompare(rightValue);
 
   return sort.direction === "asc" ? result : -result;
@@ -659,6 +706,7 @@ function compareProfiles(
 function getProfileSortValue(
   profile: DemoProfile,
   sortKey: Exclude<ProfileSortKey, "default" | "last-run">,
+  displayStatus: ProfileDisplayStatus = getDisplayStatus(profile),
 ): string {
   if (sortKey === "name") {
     return profile.name;
@@ -669,7 +717,7 @@ function getProfileSortValue(
   }
 
   if (sortKey === "status") {
-    return formatStatus(getDisplayStatus(profile));
+    return formatStatus(displayStatus);
   }
 
   if (sortKey === "proxy") {
@@ -744,6 +792,7 @@ export function App() {
     React.useState<DemoProfile | null>(null);
   const [isCreateProfileOpen, setIsCreateProfileOpen] = React.useState(false);
   const [createProfileName, setCreateProfileName] = React.useState("");
+  const [createFingerprintEnabled, setCreateFingerprintEnabled] = React.useState(true);
   const [createProfileError, setCreateProfileError] = React.useState<string | null>(
     null,
   );
@@ -751,8 +800,28 @@ export function App() {
   const [profileLoadState, setProfileLoadState] = React.useState<ProfileLoadState>({
     status: "loading",
   });
+  const [profileRunStates, setProfileRunStates] = React.useState<
+    Record<string, ProfileRunLoadState>
+  >({});
+  const [runOperationErrors, setRunOperationErrors] = React.useState<
+    Record<string, string>
+  >({});
+  const [pendingRunActions, setPendingRunActions] = React.useState<
+    Record<string, "start" | "stop" | "refresh">
+  >({});
+  const [runStatusRefreshRequired, setRunStatusRefreshRequired] = React.useState<
+    Record<string, true>
+  >({});
+  const [pendingFingerprintChanges, setPendingFingerprintChanges] = React.useState<
+    Record<string, true>
+  >({});
+  const [fingerprintOperationErrors, setFingerprintOperationErrors] = React.useState<
+    Record<string, string>
+  >({});
   const [profileReloadAttempt, setProfileReloadAttempt] = React.useState(0);
   const profileRegistryRef = React.useRef<HTMLElement | null>(null);
+  const runActionsInFlightRef = React.useRef<Set<string>>(new Set());
+  const fingerprintActionsInFlightRef = React.useRef<Set<string>>(new Set());
   const [profileRegistryScroll, setProfileRegistryScroll] = React.useState({
     hasLeftOverflow: false,
     hasRightOverflow: false,
@@ -767,13 +836,17 @@ export function App() {
       // The UI still works when browser storage is unavailable.
     }
   }, [theme]);
-  const demoMode =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).has("demo");
+  const searchParams =
+    typeof window === "undefined"
+      ? new URLSearchParams()
+      : new URLSearchParams(window.location.search);
+  const demoMode = searchParams.has("demo");
+  const fakeRuntimeMode = !demoMode && searchParams.has("fake-runtime");
 
   function openCreateProfilePanel() {
     setSelectedProxyProfile(null);
     setCreateProfileName("");
+    setCreateFingerprintEnabled(true);
     setCreateProfileError(null);
     setIsCreateProfileOpen(true);
   }
@@ -812,8 +885,12 @@ export function App() {
     setIsSubmittingProfile(true);
 
     try {
-      await createProfile({ displayName });
+      await createProfile({
+        displayName,
+        fingerprintEnabled: createFingerprintEnabled,
+      });
       setCreateProfileName("");
+      setCreateFingerprintEnabled(true);
       setIsCreateProfileOpen(false);
       setProfileReloadAttempt((current) => current + 1);
     } catch (error: unknown) {
@@ -860,9 +937,68 @@ export function App() {
     return () => controller.abort();
   }, [demoMode, profileReloadAttempt]);
 
+  React.useEffect(() => {
+    if (!fakeRuntimeMode || profileLoadState.status !== "ready") {
+      setProfileRunStates({});
+      setRunOperationErrors({});
+      setPendingRunActions({});
+      setRunStatusRefreshRequired({});
+      return;
+    }
+
+    const controller = new AbortController();
+    const profiles = profileLoadState.profiles;
+    const initialStates: Record<string, ProfileRunLoadState> = {};
+    for (const profile of profiles) {
+      initialStates[profile.id] = { status: "loading" };
+    }
+    setProfileRunStates(initialStates);
+    setRunOperationErrors({});
+    setPendingRunActions({});
+    setRunStatusRefreshRequired({});
+
+    const loadedStates: Record<string, ProfileRunLoadState> = {};
+    let nextProfileIndex = 0;
+
+    async function loadRunStates(): Promise<void> {
+      while (!controller.signal.aborted) {
+        const profile = profiles[nextProfileIndex];
+        if (profile === undefined) {
+          return;
+        }
+        nextProfileIndex += 1;
+
+        try {
+          const state = await fetchBrowserRunState(profile.id, controller.signal);
+          loadedStates[profile.id] = { status: "ready", run: state.run };
+        } catch {
+          if (controller.signal.aborted) {
+            return;
+          }
+          loadedStates[profile.id] = { status: "error" };
+        }
+      }
+    }
+
+    const workerCount = Math.min(RUN_STATE_HYDRATION_CONCURRENCY, profiles.length);
+    void Promise.all(Array.from({ length: workerCount }, () => loadRunStates())).then(
+      () => {
+        if (!controller.signal.aborted) {
+          setProfileRunStates(loadedStates);
+        }
+      },
+    );
+
+    return () => controller.abort();
+  }, [fakeRuntimeMode, profileLoadState]);
+
   const profiles = profileLoadState.status === "ready" ? profileLoadState.profiles : [];
+  const getCurrentDisplayStatus = (profile: DemoProfile): ProfileDisplayStatus =>
+    fakeRuntimeMode
+      ? getFakeRuntimeDisplayStatus(profileRunStates[profile.id])
+      : getDisplayStatus(profile);
   const runningProfileCount = profiles.filter(
-    (profile) => profile.status === "running",
+    (profile) => getCurrentDisplayStatus(profile) === "running",
   ).length;
   const configuredProxyCount = profiles.filter(
     (profile) => profile.network.address !== null,
@@ -870,7 +1006,8 @@ export function App() {
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const visibleProfiles = profiles
     .filter((profile) => {
-      if (statusFilter !== "all" && getDisplayStatus(profile) !== statusFilter) {
+      const displayStatus = getCurrentDisplayStatus(profile);
+      if (statusFilter !== "all" && displayStatus !== statusFilter) {
         return false;
       }
 
@@ -885,8 +1022,8 @@ export function App() {
         ...profile.tags.map((tagId) => demoTagCatalog[tagId].label),
         profile.status,
         profile.readiness,
-        getDisplayStatus(profile),
-        formatStatus(getDisplayStatus(profile)),
+        displayStatus,
+        formatStatus(displayStatus),
         profile.lastRunAt ?? "",
         profile.identity.platform,
         profile.network.address ?? "",
@@ -899,7 +1036,251 @@ export function App() {
         formatProxyHealth(profile.network.health),
       ].some((value) => value.toLowerCase().includes(normalizedSearchQuery));
     })
-    .sort((left, right) => compareProfiles(left, right, sortOrder));
+    .sort((left, right) =>
+      compareProfiles(left, right, sortOrder, getCurrentDisplayStatus),
+    );
+
+  function clearRunOperationError(profileId: string) {
+    setRunOperationErrors((current) => {
+      if (current[profileId] === undefined) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[profileId];
+      return next;
+    });
+  }
+
+  function clearFingerprintOperationError(profileId: string) {
+    setFingerprintOperationErrors((current) => {
+      if (current[profileId] === undefined) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[profileId];
+      return next;
+    });
+  }
+
+  async function handleFingerprintModeChange(profile: DemoProfile): Promise<void> {
+    if (!fakeRuntimeMode || fingerprintActionsInFlightRef.current.has(profile.id)) {
+      return;
+    }
+
+    fingerprintActionsInFlightRef.current.add(profile.id);
+    const fingerprintEnabled = profile.fingerprintEnabled !== false;
+    const nextFingerprintEnabled = !fingerprintEnabled;
+    setPendingFingerprintChanges((current) => ({ ...current, [profile.id]: true }));
+    clearFingerprintOperationError(profile.id);
+
+    try {
+      const updatedProfile = await updateProfileFingerprintMode(
+        profile.id,
+        nextFingerprintEnabled,
+      );
+      setProfileLoadState((current) => {
+        if (current.status !== "ready") {
+          return current;
+        }
+
+        return {
+          ...current,
+          profiles: current.profiles.map((currentProfile) =>
+            currentProfile.id === updatedProfile.id
+              ? {
+                  ...currentProfile,
+                  fingerprintEnabled: updatedProfile.fingerprintEnabled,
+                  identity: {
+                    ...currentProfile.identity,
+                    platform: updatedProfile.fingerprintEnabled
+                      ? "Pending"
+                      : "No fingerprint",
+                  },
+                }
+              : currentProfile,
+          ),
+        };
+      });
+    } catch (error: unknown) {
+      setFingerprintOperationErrors((current) => ({
+        ...current,
+        [profile.id]: getFingerprintModeErrorMessage(error),
+      }));
+    } finally {
+      fingerprintActionsInFlightRef.current.delete(profile.id);
+      setPendingFingerprintChanges((current) => {
+        if (current[profile.id] === undefined) {
+          return current;
+        }
+
+        const next = { ...current };
+        delete next[profile.id];
+        return next;
+      });
+    }
+  }
+
+  function setRunStatusRefreshNeeded(profileId: string, isNeeded: boolean) {
+    setRunStatusRefreshRequired((current) => {
+      if (isNeeded) {
+        return { ...current, [profileId]: true };
+      }
+
+      if (current[profileId] === undefined) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[profileId];
+      return next;
+    });
+  }
+
+  async function refreshRunStateUntilSettled(profileId: string): Promise<boolean> {
+    for (let attempt = 0; attempt < MAX_RUN_STATE_REFRESH_ATTEMPTS; attempt += 1) {
+      if (attempt > 0) {
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, RUN_STATE_REFRESH_INTERVAL_MS);
+        });
+      }
+
+      const state = await fetchBrowserRunState(profileId);
+      setProfileRunStates((current) => ({
+        ...current,
+        [profileId]: { status: "ready", run: state.run },
+      }));
+
+      if (!isRunTransitioning(state.run)) {
+        setRunStatusRefreshNeeded(profileId, false);
+        return true;
+      }
+    }
+
+    setRunStatusRefreshNeeded(profileId, true);
+    return false;
+  }
+
+  async function handleFakeRuntimeAction(profileId: string): Promise<void> {
+    if (!fakeRuntimeMode || runActionsInFlightRef.current.has(profileId)) {
+      return;
+    }
+
+    runActionsInFlightRef.current.add(profileId);
+    const runState = profileRunStates[profileId];
+    const needsRefresh =
+      runState === undefined ||
+      runState.status !== "ready" ||
+      runStatusRefreshRequired[profileId] === true ||
+      (runState.status === "ready" && isRunTransitioning(runState.run));
+    const action = needsRefresh
+      ? "refresh"
+      : runState?.status === "ready" && runState.run?.status === "running"
+        ? "stop"
+        : "start";
+    let commandWasAttempted = false;
+
+    setPendingRunActions((current) => ({ ...current, [profileId]: action }));
+    clearRunOperationError(profileId);
+
+    try {
+      if (needsRefresh) {
+        if (runState?.status !== "ready") {
+          setProfileRunStates((current) => ({
+            ...current,
+            [profileId]: { status: "loading" },
+          }));
+        }
+        const settled = await refreshRunStateUntilSettled(profileId);
+        if (!settled) {
+          setRunOperationErrors((current) => ({
+            ...current,
+            [profileId]:
+              "The fake runtime is still processing. Choose Check status to refresh again.",
+          }));
+        }
+        return;
+      }
+
+      commandWasAttempted = true;
+      const result =
+        action === "stop"
+          ? await stopBrowserRun(profileId)
+          : await startBrowserRun(profileId);
+      setProfileRunStates((current) => ({
+        ...current,
+        [profileId]: { status: "ready", run: result.state.run },
+      }));
+
+      if (result.statusCode === 202 && isRunTransitioning(result.state.run)) {
+        const settled = await refreshRunStateUntilSettled(profileId);
+        if (!settled) {
+          setRunOperationErrors((current) => ({
+            ...current,
+            [profileId]:
+              "The fake runtime is still processing. Choose Check status to refresh again.",
+          }));
+        }
+      } else {
+        setRunStatusRefreshNeeded(profileId, false);
+      }
+    } catch (error: unknown) {
+      if (error instanceof BrowserRunApiError && error.statusCode === 409) {
+        try {
+          const settled = await refreshRunStateUntilSettled(profileId);
+          setRunOperationErrors((current) => ({
+            ...current,
+            [profileId]: settled
+              ? "The run changed before the command completed. The latest state was refreshed."
+              : "The run changed and is still processing. Choose Check status to refresh again.",
+          }));
+        } catch {
+          setProfileRunStates((current) => ({
+            ...current,
+            [profileId]: { status: "error" },
+          }));
+          setRunOperationErrors((current) => ({
+            ...current,
+            [profileId]: "The run changed, but its latest state could not be loaded.",
+          }));
+        }
+      } else {
+        if (commandWasAttempted) {
+          try {
+            await refreshRunStateUntilSettled(profileId);
+          } catch {
+            setProfileRunStates((current) => ({
+              ...current,
+              [profileId]: { status: "error" },
+            }));
+            setRunStatusRefreshNeeded(profileId, true);
+          }
+        }
+        if (runState === undefined || runState.status !== "ready") {
+          setProfileRunStates((current) => ({
+            ...current,
+            [profileId]: { status: "error" },
+          }));
+        }
+        setRunOperationErrors((current) => ({
+          ...current,
+          [profileId]: getBrowserRunErrorMessage(error),
+        }));
+      }
+    } finally {
+      runActionsInFlightRef.current.delete(profileId);
+      setPendingRunActions((current) => {
+        if (current[profileId] === undefined) {
+          return current;
+        }
+
+        const next = { ...current };
+        delete next[profileId];
+        return next;
+      });
+    }
+  }
 
   React.useEffect(() => {
     const registry = profileRegistryRef.current;
@@ -1059,6 +1440,12 @@ export function App() {
               </a>
             </div>
           </div>
+          {fakeRuntimeMode ? (
+            <p className="runtime-mode-banner" role="status">
+              Test mode: FakeBrowserRuntime. Lifecycle simulation only; no real browser
+              is launched.
+            </p>
+          ) : null}
           <dl aria-label="Profile summary" className="profile-stats">
             <div className="profile-stat">
               <dt>All</dt>
@@ -1108,7 +1495,6 @@ export function App() {
             <option value="starting">Starting</option>
             <option value="stopping">Stopping</option>
             <option value="unknown">Unknown</option>
-            <option value="setup_required">Setup required</option>
             <option value="recovery_required">Recovery required</option>
             <option value="failed">Failed</option>
           </select>
@@ -1211,7 +1597,14 @@ export function App() {
               </li>
             ) : visibleProfiles.length > 0 ? (
               visibleProfiles.map((profile, index) => {
-                const displayStatus = getDisplayStatus(profile);
+                const displayStatus = getCurrentDisplayStatus(profile);
+                const runState = profileRunStates[profile.id];
+                const pendingRunAction = pendingRunActions[profile.id];
+                const runOperationError =
+                  runOperationErrors[profile.id] ??
+                  (fakeRuntimeMode && runState?.status === "error"
+                    ? "Unable to load the FakeBrowserRuntime run state."
+                    : null);
                 const proxyHealth =
                   proxyHealthOverrides[profile.id] ?? profile.network.health;
                 const tags = profile.tags.map((tagId) => demoTagCatalog[tagId]);
@@ -1221,6 +1614,45 @@ export function App() {
                   profile.identity.platform,
                 );
                 const lastSession = getLastSessionDisplay(profile.lastRunAt);
+                const needsRunRefresh =
+                  runStatusRefreshRequired[profile.id] === true ||
+                  (fakeRuntimeMode &&
+                    runState?.status === "ready" &&
+                    isRunTransitioning(runState.run));
+                const actionBusy =
+                  pendingRunAction !== undefined || runState?.status === "loading";
+                const actionLabel = demoMode
+                  ? "Read-only"
+                  : fakeRuntimeMode
+                    ? pendingRunAction === "start"
+                      ? "Starting…"
+                      : pendingRunAction === "stop"
+                        ? "Stopping…"
+                        : pendingRunAction === "refresh"
+                          ? "Checking…"
+                          : runState === undefined || runState.status === "loading"
+                            ? "Checking…"
+                            : runState.status === "error"
+                              ? "Retry status"
+                              : needsRunRefresh
+                                ? "Check status"
+                                : getActionLabel(displayStatus)
+                    : getActionLabel(displayStatus);
+                const actionDisabled = demoMode
+                  ? true
+                  : fakeRuntimeMode
+                    ? actionBusy ||
+                      runState === undefined ||
+                      displayStatus === "recovery_required"
+                    : displayStatus === "starting" ||
+                      displayStatus === "stopping" ||
+                      displayStatus === "unknown";
+                const fingerprintEnabled = profile.fingerprintEnabled !== false;
+                const fingerprintChangePending =
+                  pendingFingerprintChanges[profile.id] === true;
+                const fingerprintOperationError =
+                  fingerprintOperationErrors[profile.id] ?? null;
+                const fingerprintErrorId = "fingerprint-error-" + profile.id;
 
                 return (
                   <li
@@ -1391,7 +1823,11 @@ export function App() {
                         title={profile.identity.platform}
                       >
                         <span aria-hidden="true" className="profile-identity__mark">
-                          <PlatformIcon platform={profile.identity.platform} />
+                          {profile.fingerprintEnabled === false ? (
+                            <NoFingerprintIcon />
+                          ) : (
+                            <PlatformIcon platform={profile.identity.platform} />
+                          )}
                         </span>
                         <span className="profile-identity__copy">
                           <strong className="profile-identity__platform-name">
@@ -1402,6 +1838,59 @@ export function App() {
                               {identityPlatform.locale}
                             </span>
                           )}
+                          {fakeRuntimeMode ? (
+                            <>
+                              <button
+                                aria-busy={fingerprintChangePending}
+                                aria-checked={fingerprintEnabled}
+                                aria-describedby={
+                                  fingerprintOperationError === null
+                                    ? undefined
+                                    : fingerprintErrorId
+                                }
+                                aria-label={
+                                  (fingerprintEnabled ? "Disable" : "Enable") +
+                                  " fingerprint for " +
+                                  profile.name
+                                }
+                                className={
+                                  "profile-fingerprint-toggle" +
+                                  (fingerprintEnabled
+                                    ? " profile-fingerprint-toggle--enabled"
+                                    : "")
+                                }
+                                disabled={fingerprintChangePending}
+                                onClick={() =>
+                                  void handleFingerprintModeChange(profile)
+                                }
+                                role="switch"
+                                type="button"
+                              >
+                                <span
+                                  aria-hidden="true"
+                                  className="profile-fingerprint-toggle__track"
+                                >
+                                  <span className="profile-fingerprint-toggle__thumb" />
+                                </span>
+                                <span>
+                                  {fingerprintChangePending
+                                    ? "Updating…"
+                                    : fingerprintEnabled
+                                      ? "FP on"
+                                      : "FP off"}
+                                </span>
+                              </button>
+                              {fingerprintOperationError === null ? null : (
+                                <span
+                                  className="profile-fingerprint-error"
+                                  id={fingerprintErrorId}
+                                  role="alert"
+                                >
+                                  {fingerprintOperationError}
+                                </span>
+                              )}
+                            </>
+                          ) : null}
                         </span>
                       </div>
                     </div>
@@ -1427,24 +1916,31 @@ export function App() {
                     </div>
 
                     <div className="profile-entry__cell profile-entry__actions">
-                      <button
-                        aria-busy={
-                          displayStatus === "starting" || displayStatus === "stopping"
-                        }
-                        className={
-                          "button profile-action__primary profile-action__primary--" +
-                          displayStatus
-                        }
-                        disabled={
-                          displayStatus === "starting" ||
-                          displayStatus === "stopping" ||
-                          displayStatus === "unknown"
-                        }
-                        type="button"
-                      >
-                        <ProfileActionIcon status={displayStatus} />
-                        <span>{getActionLabel(displayStatus)}</span>
-                      </button>
+                      <div className="profile-action__stack">
+                        <button
+                          aria-busy={actionBusy}
+                          aria-label={actionLabel + " " + profile.name}
+                          className={
+                            "button profile-action__primary profile-action__primary--" +
+                            displayStatus
+                          }
+                          disabled={actionDisabled}
+                          onClick={
+                            fakeRuntimeMode
+                              ? () => void handleFakeRuntimeAction(profile.id)
+                              : undefined
+                          }
+                          type="button"
+                        >
+                          <ProfileActionIcon status={displayStatus} />
+                          <span>{actionLabel}</span>
+                        </button>
+                        {runOperationError === null ? null : (
+                          <span className="profile-action__error" role="alert">
+                            {runOperationError}
+                          </span>
+                        )}
+                      </div>
                       <button
                         aria-label={"Open details for " + profile.name}
                         className="profile-action__details"
@@ -1605,6 +2101,20 @@ export function App() {
                     placeholder="e.g. Research profile"
                     value={createProfileName}
                   />
+                </label>
+                <label className="create-profile-form__fingerprint">
+                  <input
+                    checked={createFingerprintEnabled}
+                    disabled={isSubmittingProfile}
+                    onChange={(event) =>
+                      setCreateFingerprintEnabled(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                  <span className="create-profile-form__fingerprint-copy">
+                    <strong>Use a generated fingerprint</strong>
+                    <span>Turn off to create a profile without one.</span>
+                  </span>
                 </label>
                 {createProfileError ? (
                   <p className="create-profile-form__error" role="alert">
