@@ -6,6 +6,7 @@ export type ApiHost = "127.0.0.1" | "::1";
 export interface ApiServerConfig {
   readonly host: ApiHost;
   readonly port: number;
+  readonly allowedOrigins?: readonly string[];
 }
 
 export const DEFAULT_API_SERVER_CONFIG: ApiServerConfig = {

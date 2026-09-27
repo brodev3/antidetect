@@ -12,6 +12,8 @@ const UNAUTHORIZED_RESPONSE = {
   statusCode: 401,
 } as const;
 
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
 function formatExpectedHost(config: ApiServerConfig): string {
   return config.host === "::1"
     ? `[${config.host}]:${config.port}`
@@ -52,7 +54,12 @@ function isAllowedApiRequest(
   }
 
   const origin = request.headers.origin;
-  return origin === undefined || origin === formatExpectedOrigin(config);
+  if (origin === undefined) {
+    return SAFE_METHODS.has(request.method);
+  }
+
+  const allowedOrigins = config.allowedOrigins ?? [formatExpectedOrigin(config)];
+  return allowedOrigins.includes(origin);
 }
 
 function getRequestPath(url: string): string {

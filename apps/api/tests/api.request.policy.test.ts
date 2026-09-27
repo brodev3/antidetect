@@ -43,6 +43,108 @@ test("allows the exact local same-origin request", async () => {
   expect(response.statusCode).toBe(200);
 });
 
+test("allows only explicitly configured UI origins", async () => {
+  const app = await buildApp({
+    profileRepository: createProfileRepositoryStub(),
+    config: {
+      host: "127.0.0.1",
+      port: 3000,
+      allowedOrigins: ["http://127.0.0.1:5173"],
+    },
+  });
+
+  try {
+    const allowedResponse = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/health",
+        headers: {
+          host: validHost,
+          origin: "http://127.0.0.1:5173",
+        },
+      });
+    const unlistedResponse = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/health",
+        headers: {
+          host: validHost,
+          origin: "http://127.0.0.1:3000",
+        },
+      });
+    const sessionResponse = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "GET",
+        url: "/session",
+        headers: { host: validHost },
+      });
+    const sessionCookie = String(sessionResponse.headers["set-cookie"] ?? "").split(
+      ";",
+      1,
+    )[0];
+    const createResponse = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "POST",
+        url: "/profiles",
+        headers: {
+          host: validHost,
+          origin: "http://127.0.0.1:5173",
+          cookie: sessionCookie,
+          "content-type": "application/json",
+        },
+        payload: { displayName: "Vite profile" },
+      });
+
+    expect(allowedResponse.statusCode).toBe(200);
+    expect(unlistedResponse.statusCode).toBe(403);
+    expect(sessionResponse.statusCode).toBe(204);
+    expect(createResponse.statusCode).toBe(201);
+  } finally {
+    await app.close();
+  }
+});
+
+test("requires an allowed Origin for state-changing requests", async () => {
+  const app = await buildApp({
+    profileRepository: createProfileRepositoryStub(),
+  });
+
+  try {
+    const missingOriginResponse = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "POST",
+        url: "/profiles",
+        headers: { host: validHost },
+      });
+    const unapprovedOriginResponse = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "POST",
+        url: "/profiles",
+        headers: {
+          host: validHost,
+          origin: "http://attacker.example",
+        },
+      });
+
+    expect(missingOriginResponse.statusCode).toBe(403);
+    expect(unapprovedOriginResponse.statusCode).toBe(403);
+  } finally {
+    await app.close();
+  }
+});
+
 test.each([
   { host: "localhost:3000" },
   { host: "192.168.1.20:3000" },
