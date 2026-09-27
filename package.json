@@ -7,6 +7,7 @@
     "format": "prettier --write \"apps/**/*.{ts,tsx,css,html}\" \"apps/web/package.json\" \"packages/**/*.ts\" \"*.{json,mjs}\" \"vitest*.ts\"",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,css,html}\" \"apps/web/package.json\" \"packages/**/*.ts\" \"*.{json,mjs}\" \"vitest*.ts\"",
     "build": "tsc -p packages/contracts/tsconfig.build.json && tsc -p apps/api/tsconfig.build.json && corepack pnpm --filter @antidetect/web run build",
+    "dev:fake-api": "tsc -p packages/contracts/tsconfig.build.json && tsc -p apps/api/tsconfig.build.json && node apps/api/dist/fake.main.js",
     "lint": "eslint apps packages --max-warnings 0",
     "pretest": "tsc -p packages/contracts/tsconfig.build.json",
     "test": "vitest run",

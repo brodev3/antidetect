@@ -21,9 +21,19 @@ export {
   profileIdSchema,
   profilePathParamsSchema,
   profileResponseSchema,
+  updateProfileFingerprintModeRequestSchema,
   type CreateProfileRequest,
   type ListProfilesQuery,
   type ListProfilesResponse,
   type ProfilePathParams,
   type ProfileResponse,
+  type UpdateProfileFingerprintModeRequest,
 } from "./profiles.js";
+export {
+  browserRunResponseSchema,
+  browserRunStateResponseSchema,
+  browserRunStatusSchema,
+  type BrowserRunResponse,
+  type BrowserRunStateResponse,
+  type BrowserRunStatus,
+} from "./browser-runs.js";

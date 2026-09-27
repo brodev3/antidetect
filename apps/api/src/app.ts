@@ -3,6 +3,7 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import { cleanupOpenApiDoc } from "nestjs-zod";
 import { AppModule } from "./app.module.js";
+import type { BrowserLifecycleService } from "./application/browserRuns/browser.lifecycle.service.js";
 import type { ProfileRepository } from "./application/profiles/profile.repository.js";
 import {
   DEFAULT_API_SERVER_CONFIG,
@@ -13,16 +14,18 @@ import { LocalSessionStore } from "./infrastructure/http/local.session.js";
 
 export interface BuildAppOptions {
   readonly profileRepository: ProfileRepository;
+  readonly browserLifecycleService?: BrowserLifecycleService;
   readonly config?: ApiServerConfig;
 }
 
 export async function buildApp({
   profileRepository,
+  browserLifecycleService,
   config = DEFAULT_API_SERVER_CONFIG,
 }: BuildAppOptions): Promise<NestFastifyApplication> {
   const localSession = new LocalSessionStore();
   const app = await NestFactory.create<NestFastifyApplication>(
-    AppModule.register(profileRepository, localSession),
+    AppModule.register(profileRepository, localSession, browserLifecycleService),
     new FastifyAdapter({ logger: false }),
     { logger: false },
   );

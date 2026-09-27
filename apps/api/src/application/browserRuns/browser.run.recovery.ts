@@ -34,9 +34,9 @@ export class RecoveryBarrierBlockedError extends Error {
 }
 
 /**
- * Read-only startup gate. It never infers process state or mutates a run.
- * Any persisted occupying run keeps readiness blocked until a later,
- * process-aware recovery flow proves that the run can be released.
+ * Read-only snapshot of occupying runs for recovery diagnostics and tests.
+ * It never infers process state or mutates a run. Production API startup must
+ * not use this snapshot as a global readiness gate; occupancy is profile-scoped.
  */
 export class BrowserRunRecoveryBarrier {
   constructor(private readonly runs: BrowserRunRepository) {}

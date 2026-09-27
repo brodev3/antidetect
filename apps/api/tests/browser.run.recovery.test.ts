@@ -70,6 +70,7 @@ test("allows readiness when only terminal history is persisted", async () => {
     await profiles.create({
       id: "profile-001",
       displayName: "History profile",
+      fingerprintEnabled: true,
       identityRef: "identity-001",
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -93,6 +94,7 @@ test("blocks readiness for every occupying status", async () => {
       await profiles.create({
         id: profileId,
         displayName: `${status} profile`,
+        fingerprintEnabled: true,
         identityRef: `identity-00${index + 1}`,
         createdAt: timestamp,
         updatedAt: timestamp,

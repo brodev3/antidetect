@@ -28,6 +28,7 @@ test.each(["findActiveByProfileId", "listOccupying"] as const)(
       await new SqliteProfileRepository(database).create({
         id: profileId,
         displayName: "Query plan profile",
+        fingerprintEnabled: true,
         identityRef: "test-identity",
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -83,3 +84,51 @@ test.each(["findActiveByProfileId", "listOccupying"] as const)(
     }
   },
 );
+
+test("findLatestByProfileId returns the last inserted terminal run at equal timestamps", async () => {
+  const root = await fs.mkdtemp(join(tmpdir(), "antidetect-latest-run-"));
+  const owner = acquireRootOwnership(join(root, "antidetect.sqlite"));
+  const database = new Kysely<AppDatabaseSchema>({
+    dialect: new SqliteDialect({ database: owner.sqlite }),
+  });
+  try {
+    await runMigrations(database);
+    const timestamp = "2026-09-19T10:00:00.000Z";
+    const profileId = "profile-latest";
+    await new SqliteProfileRepository(database).create({
+      id: profileId,
+      displayName: "Latest run profile",
+      fingerprintEnabled: true,
+      identityRef: "test-identity",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const runs = new SqliteBrowserRunRepository(database);
+    const first = {
+      id: "run-z",
+      profileId,
+      status: "failed",
+      processPid: null,
+      processIdentity: null,
+      failureCode: "ENGINE_NOT_READY",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      endedAt: timestamp,
+    } as const;
+    const second = {
+      ...first,
+      id: "run-a",
+      status: "stopped",
+      failureCode: null,
+    } as const;
+    await runs.create(first);
+    await runs.create(second);
+
+    await expect(runs.findActiveByProfileId(profileId)).resolves.toBeNull();
+    await expect(runs.findLatestByProfileId(profileId)).resolves.toEqual(second);
+  } finally {
+    await database.destroy();
+    owner.close();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});

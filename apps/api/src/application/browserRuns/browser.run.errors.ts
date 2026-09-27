@@ -32,3 +32,49 @@ export class ActiveBrowserRunConflictError extends Error {
     this.name = "ActiveBrowserRunConflictError";
   }
 }
+
+export class BrowserRunStartingError extends Error {
+  readonly code = "BROWSER_RUN_START_IN_PROGRESS" as const;
+
+  constructor(readonly runId: string) {
+    super(`Browser run ${runId} is still starting`);
+    this.name = "BrowserRunStartingError";
+  }
+}
+
+export class BrowserRuntimeLaunchFailedError extends Error {
+  readonly code = "BROWSER_RUNTIME_LAUNCH_FAILED" as const;
+
+  constructor(
+    readonly runId: string,
+    readonly failureCode: string,
+    readonly phase: "before_spawn" | "spawn_uncertain",
+  ) {
+    super(`Browser runtime launch failed for run ${runId}: ${failureCode}`);
+    this.name = "BrowserRuntimeLaunchFailedError";
+  }
+}
+
+export class BrowserRuntimeRecoveryRequiredError extends Error {
+  readonly code = "BROWSER_RUNTIME_RECOVERY_REQUIRED" as const;
+
+  constructor(
+    readonly runId: string,
+    readonly failureCode: string,
+  ) {
+    super(`Browser run ${runId} requires recovery: ${failureCode}`);
+    this.name = "BrowserRuntimeRecoveryRequiredError";
+  }
+}
+
+export class BrowserRuntimeStopFailedError extends Error {
+  readonly code = "BROWSER_RUNTIME_STOP_FAILED" as const;
+
+  constructor(
+    readonly runId: string,
+    readonly failureCode: string,
+  ) {
+    super(`Browser runtime stop failed for run ${runId}: ${failureCode}`);
+    this.name = "BrowserRuntimeStopFailedError";
+  }
+}

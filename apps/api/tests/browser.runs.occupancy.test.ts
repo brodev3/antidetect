@@ -12,6 +12,7 @@ import { acquireRootOwnership } from "../src/infrastructure/sqlite/root.ownershi
 const firstProfile = {
   id: "profile-001",
   displayName: "Research profile",
+  fingerprintEnabled: true,
   identityRef: "identity-001",
   createdAt: "2026-09-17T10:00:00.000Z",
   updatedAt: "2026-09-17T10:00:00.000Z",

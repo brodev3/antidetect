@@ -195,7 +195,7 @@ async function expectPortClosed(port: number): Promise<void> {
   ).rejects.toThrow();
 }
 
-async function seedBlockingRun(rootDir: string): Promise<void> {
+async function seedRecoveryRequiredRun(rootDir: string): Promise<void> {
   const paths = resolveAppPaths({ env: { ANTIDETECT_HOME: rootDir } });
   await ensureAppRootDirectories(paths);
 
@@ -208,6 +208,7 @@ async function seedBlockingRun(rootDir: string): Promise<void> {
     await profiles.create({
       id: "profile-recovery",
       displayName: "Recovery profile",
+      fingerprintEnabled: true,
       identityRef: "identity-recovery",
       createdAt: "2026-09-19T10:00:00.000Z",
       updatedAt: "2026-09-19T10:00:00.000Z",
@@ -216,7 +217,7 @@ async function seedBlockingRun(rootDir: string): Promise<void> {
     await runs.create({
       id: "run-recovery",
       profileId: "profile-recovery",
-      status: "starting",
+      status: "recovery_required",
       processPid: 424242,
       processIdentity: "PRIVATE_PROCESS_METADATA_TEST_MARKER",
       failureCode: "PRIVATE_FAILURE_DETAILS_TEST_MARKER",
@@ -320,27 +321,31 @@ test("rejects startup before creating product directories", async () => {
   }
 }, 20_000);
 
-test("blocks startup when a persisted browser run needs recovery", async () => {
+test("starts API and preserves a persisted recovery-required run", async () => {
   const tempRoot = await fs.mkdtemp(join(tmpdir(), "antidetect-api-recovery-"));
   const rootDir = join(tempRoot, "app");
   const port = await createFreePort();
   let apiProcess: ChildProcess | undefined;
 
   try {
-    await seedBlockingRun(rootDir);
+    await seedRecoveryRequiredRun(rootDir);
 
     apiProcess = spawnApi(rootDir, port);
     const apiOutput = captureOutput(apiProcess);
-    const apiExitCode = await waitForClose(apiProcess);
-
-    expect(apiExitCode).not.toBe(0);
-    expect(apiOutput.stderr).toContain("Recovery barrier blocked API startup");
-    expect(apiOutput.stderr).toContain("run-recovery");
+    await waitForOutput(
+      apiProcess,
+      `Antidetect API listening on http://127.0.0.1:${port}`,
+      20_000,
+      apiOutput,
+    );
+    await expectHealth(port);
     expect(apiOutput.stderr).not.toContain("PRIVATE_PROCESS_METADATA_TEST_MARKER");
+    expect(apiOutput.stdout).not.toContain("PRIVATE_PROCESS_METADATA_TEST_MARKER");
     expect(apiOutput.stderr).not.toContain("PRIVATE_FAILURE_DETAILS_TEST_MARKER");
-    expect(apiOutput.stdout).not.toContain("Antidetect API listening");
-    await expectPortClosed(port);
+    expect(apiOutput.stdout).not.toContain("PRIVATE_FAILURE_DETAILS_TEST_MARKER");
 
+    await stopProcess(apiProcess);
+    apiProcess = undefined;
     const paths = resolveAppPaths({ env: { ANTIDETECT_HOME: rootDir } });
     const owner = acquireRootOwnership(paths.databasePath);
     const database = createAppDatabase(owner);
@@ -348,7 +353,7 @@ test("blocks startup when a persisted browser run needs recovery", async () => {
       await expect(
         new SqliteBrowserRunRepository(database).findById("run-recovery"),
       ).resolves.toMatchObject({
-        status: "starting",
+        status: "recovery_required",
         processPid: 424242,
         processIdentity: "PRIVATE_PROCESS_METADATA_TEST_MARKER",
         failureCode: "PRIVATE_FAILURE_DETAILS_TEST_MARKER",
@@ -359,9 +364,7 @@ test("blocks startup when a persisted browser run needs recovery", async () => {
     }
 
     for (const directoryName of ["config", "profiles", "runtime", "logs"]) {
-      await expect(fs.stat(join(rootDir, directoryName))).rejects.toMatchObject({
-        code: "ENOENT",
-      });
+      await expect(fs.stat(join(rootDir, directoryName))).resolves.toBeDefined();
     }
   } finally {
     await stopProcess(apiProcess);

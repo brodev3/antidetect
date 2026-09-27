@@ -71,6 +71,18 @@ export class SqliteBrowserRunRepository implements BrowserRunRepository {
     return row === undefined ? null : toBrowserRun(row);
   }
 
+  async findLatestByProfileId(profileId: string): Promise<BrowserRun | null> {
+    const row = await this.database
+      .selectFrom("browser_runs")
+      .selectAll()
+      .where("profile_id", "=", profileId)
+      .orderBy("created_at", "desc")
+      .orderBy(sql`rowid`, "desc")
+      .executeTakeFirst();
+
+    return row === undefined ? null : toBrowserRun(row);
+  }
+
   async listOccupying(): Promise<readonly BrowserRun[]> {
     const rows = await this.database
       .selectFrom("browser_runs")

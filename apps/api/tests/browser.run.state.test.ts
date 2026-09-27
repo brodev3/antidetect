@@ -14,6 +14,7 @@ describe("browser run state machine", () => {
     ["running", "stopping"],
     ["running", "stopped"],
     ["stopping", "failed"],
+    ["recovery_required", "running"],
     ["recovery_required", "failed"],
   ] as const)("allows %s -> %s", (from, to) => {
     expect(canTransitionBrowserRun(from, to)).toBe(true);
@@ -24,7 +25,6 @@ describe("browser run state machine", () => {
     ["starting", "stopped"],
     ["stopped", "running"],
     ["failed", "starting"],
-    ["recovery_required", "running"],
   ] as const)("rejects %s -> %s", (from, to) => {
     expect(canTransitionBrowserRun(from, to)).toBe(false);
     expect(() => transitionBrowserRun(from, to)).toThrow(

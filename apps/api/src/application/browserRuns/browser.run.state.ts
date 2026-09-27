@@ -28,7 +28,7 @@ const allowedTransitions: Readonly<
   starting: ["running", "failed", "recovery_required"],
   running: ["stopping", "stopped", "failed", "recovery_required"],
   stopping: ["stopped", "failed", "recovery_required"],
-  recovery_required: ["stopped", "failed"],
+  recovery_required: ["running", "stopped", "failed"],
   stopped: [],
   failed: [],
 };
