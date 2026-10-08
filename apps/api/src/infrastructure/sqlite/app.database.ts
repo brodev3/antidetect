@@ -22,6 +22,13 @@ export interface ProfileCodeSequenceTable {
   next_value: number;
 }
 
+export interface FingerprintIdentitiesTable {
+  id: string;
+  format_version: number;
+  config_json: string;
+  created_at: string;
+}
+
 export interface BrowserRunsTable {
   id: string;
   profile_id: string;
@@ -38,6 +45,7 @@ export interface AppDatabaseSchema {
   schema_migrations: SchemaMigrationsTable;
   profiles: ProfilesTable;
   profile_code_sequence: ProfileCodeSequenceTable;
+  fingerprint_identities: FingerprintIdentitiesTable;
   browser_runs: BrowserRunsTable;
 }
 

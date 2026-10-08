@@ -1,5 +1,6 @@
 import { sql, type Kysely } from "kysely";
 import type { AppDatabase, AppDatabaseSchema } from "../app.database.js";
+import { createFingerprintIdentitiesMigration } from "./004-create-fingerprint-identities.js";
 import { addProfileCodesMigration } from "./003-add-profile-codes.js";
 import { createBrowserRunsMigration } from "./002-create-browser-runs.js";
 import { createProfilesMigration } from "./001-create-profiles.js";
@@ -14,6 +15,7 @@ const migrations: readonly Migration[] = [
   createProfilesMigration,
   createBrowserRunsMigration,
   addProfileCodesMigration,
+  createFingerprintIdentitiesMigration,
 ];
 
 export class IncompatibleDatabaseSchemaError extends Error {

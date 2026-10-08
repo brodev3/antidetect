@@ -1,12 +1,16 @@
+import { InvalidFingerprintIdentityError } from "../../application/fingerprints/fingerprint.identity.errors.js";
+import type { FingerprintIdentity } from "../../application/fingerprints/fingerprint.identity.repository.js";
 import type {
   Profile,
   ProfileDraft,
   ProfileFingerprintSettings,
+  ProfileFingerprintCreationRepository,
   ProfileListOptions,
   ProfileRepository,
 } from "../../application/profiles/profile.repository.js";
 import { sql } from "kysely";
 import type { AppDatabase, ProfilesTable } from "./app.database.js";
+import { SqliteFingerprintIdentityRepository } from "./sqlite.fingerprint.identity.repository.js";
 
 function toProfile(row: ProfilesTable): Profile {
   return {
@@ -20,46 +24,44 @@ function toProfile(row: ProfilesTable): Profile {
   };
 }
 
-export class SqliteProfileRepository implements ProfileRepository {
+export class SqliteProfileRepository
+  implements ProfileRepository, ProfileFingerprintCreationRepository
+{
   constructor(private readonly database: AppDatabase) {}
 
   async create(profile: ProfileDraft): Promise<Profile> {
+    return this.database
+      .transaction()
+      .execute((transaction) => insertProfile(transaction, profile));
+  }
+
+  async createWithFingerprint(
+    profile: Omit<ProfileDraft, "fingerprintEnabled" | "identityRef">,
+    identity: FingerprintIdentity,
+  ): Promise<Profile> {
+    const profileSnapshot = {
+      id: profile.id,
+      displayName: profile.displayName,
+      createdAt: profile.createdAt,
+      updatedAt: profile.updatedAt,
+    };
+    let identitySnapshot: FingerprintIdentity;
+    try {
+      identitySnapshot = structuredClone(identity);
+    } catch {
+      throw new InvalidFingerprintIdentityError();
+    }
+
     return this.database.transaction().execute(async (transaction) => {
-      await transaction
-        .updateTable("profile_code_sequence")
-        .set({ next_value: sql<number>`next_value + 1` })
-        .where("id", "=", 1)
-        .execute();
+      const savedIdentity = await new SqliteFingerprintIdentityRepository(
+        transaction,
+      ).create(identitySnapshot);
 
-      const sequence = await transaction
-        .selectFrom("profile_code_sequence")
-        .select("next_value")
-        .where("id", "=", 1)
-        .executeTakeFirst();
-
-      if (sequence === undefined) {
-        throw new Error("Profile code sequence is not initialized");
-      }
-
-      const createdProfile: Profile = {
-        ...profile,
-        profileCode: formatProfileCode(sequence.next_value - 1),
-      };
-
-      await transaction
-        .insertInto("profiles")
-        .values({
-          id: createdProfile.id,
-          profile_code: createdProfile.profileCode,
-          display_name: createdProfile.displayName,
-          fingerprint_enabled: createdProfile.fingerprintEnabled ? 1 : 0,
-          identity_ref: createdProfile.identityRef,
-          created_at: createdProfile.createdAt,
-          updated_at: createdProfile.updatedAt,
-        })
-        .execute();
-
-      return createdProfile;
+      return insertProfile(transaction, {
+        ...profileSnapshot,
+        fingerprintEnabled: true,
+        identityRef: savedIdentity.id,
+      });
     });
   }
 
@@ -119,6 +121,47 @@ export class SqliteProfileRepository implements ProfileRepository {
 
     return rows.map(toProfile);
   }
+}
+
+async function insertProfile(
+  database: AppDatabase,
+  profile: ProfileDraft,
+): Promise<Profile> {
+  await database
+    .updateTable("profile_code_sequence")
+    .set({ next_value: sql<number>`next_value + 1` })
+    .where("id", "=", 1)
+    .execute();
+
+  const sequence = await database
+    .selectFrom("profile_code_sequence")
+    .select("next_value")
+    .where("id", "=", 1)
+    .executeTakeFirst();
+
+  if (sequence === undefined) {
+    throw new Error("Profile code sequence is not initialized");
+  }
+
+  const createdProfile: Profile = {
+    ...profile,
+    profileCode: formatProfileCode(sequence.next_value - 1),
+  };
+
+  await database
+    .insertInto("profiles")
+    .values({
+      id: createdProfile.id,
+      profile_code: createdProfile.profileCode,
+      display_name: createdProfile.displayName,
+      fingerprint_enabled: createdProfile.fingerprintEnabled ? 1 : 0,
+      identity_ref: createdProfile.identityRef,
+      created_at: createdProfile.createdAt,
+      updated_at: createdProfile.updatedAt,
+    })
+    .execute();
+
+  return createdProfile;
 }
 
 function formatProfileCode(sequenceValue: number): string {

@@ -1,3 +1,5 @@
+import type { FingerprintIdentity } from "../fingerprints/fingerprint.identity.repository.js";
+
 export interface Profile {
   readonly id: string;
   readonly profileCode: string;
@@ -42,4 +44,12 @@ export interface ProfileRepository {
     settings: ProfileFingerprintSettings,
   ): Promise<Profile | null>;
   list(options: ProfileListOptions): Promise<readonly Profile[]>;
+}
+
+export interface ProfileFingerprintCreationRepository {
+  // The identity is generated before this atomic persistence operation.
+  createWithFingerprint(
+    profile: Omit<ProfileDraft, "fingerprintEnabled" | "identityRef">,
+    identity: FingerprintIdentity,
+  ): Promise<Profile>;
 }

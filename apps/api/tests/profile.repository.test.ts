@@ -43,11 +43,12 @@ test("runs profiles migration idempotently and persists repository data", async 
       .selectFrom("schema_migrations")
       .selectAll()
       .execute();
-    expect(migrations).toHaveLength(3);
+    expect(migrations).toHaveLength(4);
     expect(migrations.map((migration) => migration.name)).toEqual([
       createProfilesMigration.name,
       "create_browser_runs",
       "add_profile_codes",
+      "create_fingerprint_identities",
     ]);
 
     const repository = new SqliteProfileRepository(firstDatabase);

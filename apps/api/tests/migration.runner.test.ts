@@ -9,6 +9,8 @@ import {
 } from "../src/infrastructure/sqlite/app.database.ts";
 import { acquireRootOwnership } from "../src/infrastructure/sqlite/root.ownership.ts";
 import { createProfilesMigration } from "../src/infrastructure/sqlite/migrations/001-create-profiles.ts";
+import { createBrowserRunsMigration } from "../src/infrastructure/sqlite/migrations/002-create-browser-runs.ts";
+import { addProfileCodesMigration } from "../src/infrastructure/sqlite/migrations/003-add-profile-codes.ts";
 import { runMigrations } from "../src/infrastructure/sqlite/migrations/migration.runner.ts";
 import { SqliteProfileRepository } from "../src/infrastructure/sqlite/sqlite.profile.repository.ts";
 
@@ -69,6 +71,21 @@ async function prepareVersionOne(database: AppDatabase): Promise<void> {
   `.execute(database);
 }
 
+async function prepareVersionThree(database: AppDatabase): Promise<void> {
+  await prepareVersionOne(database);
+  for (const migration of [createBrowserRunsMigration, addProfileCodesMigration]) {
+    await migration.up(database);
+    await database
+      .insertInto("schema_migrations")
+      .values({
+        version: migration.version,
+        name: migration.name,
+        applied_at: timestamp,
+      })
+      .execute();
+  }
+}
+
 test("applies pending migrations without losing profiles", async () => {
   await withDatabase(async (database) => {
     await prepareVersionOne(database);
@@ -80,12 +97,116 @@ test("applies pending migrations without losing profiles", async () => {
       .select("version")
       .orderBy("version")
       .execute();
-    expect(applied).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
+    expect(applied).toEqual([
+      { version: 1 },
+      { version: 2 },
+      { version: 3 },
+      { version: 4 },
+    ]);
     await expect(
       new SqliteProfileRepository(database).findById(profile.id),
     ).resolves.toEqual(migratedProfile);
     await expect(
       database.selectFrom("browser_runs").selectAll().execute(),
+    ).resolves.toEqual([]);
+    await expect(
+      database.selectFrom("fingerprint_identities").selectAll().execute(),
+    ).resolves.toEqual([]);
+  });
+});
+
+test("upgrades version three without changing profiles, runs or code sequence", async () => {
+  await withDatabase(async (database) => {
+    await prepareVersionThree(database);
+    await database
+      .insertInto("browser_runs")
+      .values({
+        id: "existing-run",
+        profile_id: profile.id,
+        status: "recovery_required",
+        process_pid: 42,
+        process_identity: "saved-process-identity",
+        failure_code: "RUNTIME_TIMEOUT",
+        created_at: timestamp,
+        updated_at: timestamp,
+        ended_at: null,
+      })
+      .execute();
+    const beforeProfiles = await database.selectFrom("profiles").selectAll().execute();
+    const beforeRuns = await database.selectFrom("browser_runs").selectAll().execute();
+    const beforeSequence = await database
+      .selectFrom("profile_code_sequence")
+      .selectAll()
+      .execute();
+    const beforeHistory = await database
+      .selectFrom("schema_migrations")
+      .selectAll()
+      .execute();
+
+    await runMigrations(database);
+    await runMigrations(database);
+
+    await expect(
+      database.selectFrom("profiles").selectAll().execute(),
+    ).resolves.toEqual(beforeProfiles);
+    await expect(
+      database.selectFrom("browser_runs").selectAll().execute(),
+    ).resolves.toEqual(beforeRuns);
+    await expect(
+      database.selectFrom("profile_code_sequence").selectAll().execute(),
+    ).resolves.toEqual(beforeSequence);
+    await expect(
+      database
+        .selectFrom("schema_migrations")
+        .selectAll()
+        .where("version", "<=", 3)
+        .execute(),
+    ).resolves.toEqual(beforeHistory);
+    await expect(
+      database.selectFrom("fingerprint_identities").selectAll().execute(),
+    ).resolves.toEqual([]);
+  });
+});
+
+test("rolls back fingerprint table and triggers when version four cannot be recorded", async () => {
+  await withDatabase(async (database) => {
+    await prepareVersionThree(database);
+    const beforeHistory = await database
+      .selectFrom("schema_migrations")
+      .selectAll()
+      .execute();
+    const beforeProfiles = await database.selectFrom("profiles").selectAll().execute();
+    await sql`
+      CREATE TRIGGER fail_fingerprint_migration BEFORE INSERT ON schema_migrations
+      WHEN NEW.version = 4
+      BEGIN
+        SELECT RAISE(ABORT, 'injected fingerprint migration failure');
+      END
+    `.execute(database);
+
+    await expect(runMigrations(database)).rejects.toThrow(
+      "injected fingerprint migration failure",
+    );
+    await expect(
+      sql`
+      SELECT name FROM sqlite_schema WHERE name IN (
+        'fingerprint_identities',
+        'fingerprint_identities_no_update',
+        'fingerprint_identities_no_replace'
+      )
+    `.execute(database),
+    ).resolves.toMatchObject({ rows: [] });
+    await expect(
+      database.selectFrom("schema_migrations").selectAll().execute(),
+    ).resolves.toEqual(beforeHistory);
+    await expect(
+      database.selectFrom("profiles").selectAll().execute(),
+    ).resolves.toEqual(beforeProfiles);
+
+    await sql`DROP TRIGGER fail_fingerprint_migration`.execute(database);
+    await expect(runMigrations(database)).resolves.toBeUndefined();
+    await expect(
+      database.selectFrom("fingerprint_identities").selectAll().execute(),
     ).resolves.toEqual([]);
   });
 });
