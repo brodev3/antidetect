@@ -35,6 +35,7 @@ export interface FakeBrowserRuntimeOptions {
 interface ProcessRecord {
   readonly runId: string;
   readonly profileId: string;
+  readonly profileDirectory: string;
   readonly handle: RuntimeProcess;
   readonly listeners: Set<(exit: RuntimeExit) => void>;
   readonly state: { exited: RuntimeExit | null };
@@ -158,6 +159,7 @@ export class FakeBrowserRuntime implements BrowserRuntime {
     if (
       record === undefined ||
       record.profileId !== input.profileId ||
+      record.profileDirectory !== input.profileDirectory ||
       (input.processPid !== null && record.handle.pid !== input.processPid) ||
       (input.processIdentity !== null &&
         record.handle.processIdentity !== input.processIdentity)
@@ -204,15 +206,33 @@ export class FakeBrowserRuntime implements BrowserRuntime {
       };
     }
 
-    const exit = plan.exit ?? { code: 0, signal: null };
+    const exit: RuntimeExit = plan.exit ?? { kind: "normal", code: 0, signal: null };
     this.emitExit(record, exit);
     return { status: "stopped", exit };
   }
 
   emitUnexpectedExit(
     process: RuntimeProcess,
-    exit: RuntimeExit = { code: 1, signal: null },
+    exit: Omit<RuntimeExit, "kind"> = { code: 1, signal: null },
   ): void {
+    this.emitProcessExit(process, { ...exit, kind: "abnormal" });
+  }
+
+  emitNormalExit(
+    process: RuntimeProcess,
+    exit: Omit<RuntimeExit, "kind"> = { code: 0, signal: null },
+  ): void {
+    this.emitProcessExit(process, { ...exit, kind: "normal" });
+  }
+
+  emitUnknownExit(
+    process: RuntimeProcess,
+    exit: Omit<RuntimeExit, "kind"> = { code: null, signal: null },
+  ): void {
+    this.emitProcessExit(process, { ...exit, kind: "unknown" });
+  }
+
+  private emitProcessExit(process: RuntimeProcess, exit: RuntimeExit): void {
     const record = this.findProcess(process);
     if (record.state.exited !== null) {
       return;
@@ -245,6 +265,7 @@ export class FakeBrowserRuntime implements BrowserRuntime {
     const record: ProcessRecord = {
       runId: input.runId,
       profileId: input.profileId,
+      profileDirectory: input.profileDirectory,
       handle,
       listeners,
       state,

@@ -135,6 +135,8 @@ test("recovers a spawned process from SQLite when process metadata was not saved
       {
         runId: "run-001",
         profileId: profile.id,
+        runCreatedAt: "2026-09-27T10:01:00.000Z",
+        profileDirectory: `C:/profiles/${profile.id}`,
         processPid: null,
         processIdentity: null,
       },
@@ -265,3 +267,164 @@ test("keeps uncertain SQLite runs occupied but releases confirmed absent runs", 
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test.each([
+  { outcome: "attached", status: "running", failureCode: null },
+  {
+    outcome: "absent",
+    status: "failed",
+    failureCode: "RUNTIME_PROCESS_NOT_FOUND_DURING_RECOVERY",
+  },
+  {
+    outcome: "unknown",
+    status: "recovery_required",
+    failureCode: "RUNTIME_PROCESS_IDENTITY_UNVERIFIED",
+  },
+  { outcome: "exited", status: "failed", failureCode: "RUNTIME_UNEXPECTED_EXIT" },
+] as const)(
+  "recovers an interrupted stop from a reopened SQLite database ($outcome)",
+  async ({ outcome, status, failureCode }) => {
+    const tempRoot = await fs.mkdtemp(join(tmpdir(), "antidetect-interrupted-stop-"));
+    const paths = resolveAppPaths({ env: { ANTIDETECT_HOME: join(tempRoot, "app") } });
+    await ensureAppRootDirectories(paths);
+    const processHost = new FakeBrowserProcessHost();
+    const initialRuntime = new FakeBrowserRuntime({ processHost });
+    let persistedRun: BrowserRun | undefined;
+    try {
+      const initialOwner = acquireRootOwnership(paths.databasePath);
+      const initialDatabase = createAppDatabase(initialOwner);
+      try {
+        await runMigrations(initialDatabase);
+        const profiles = new SqliteProfileRepository(initialDatabase);
+        const runs = new SqliteBrowserRunRepository(initialDatabase);
+        await profiles.create(profile);
+        const initialService = new BrowserLifecycleService(
+          profiles,
+          runs,
+          initialRuntime,
+          new ProfileOperationMutex(),
+          {
+            profileDirectoryFor: (profileId) => `C:/profiles/${profileId}`,
+            now: () => "2026-10-02T10:00:00.000Z",
+            createRunId: () => "persisted-stop",
+          },
+        );
+        await initialService.start(profile.id);
+        await vi.waitFor(() => expect(initialService.pendingTaskCount).toBe(0));
+        const running = await runs.findLatestByProfileId(profile.id);
+        if (running === null) throw new Error("Expected persisted running record");
+        expect(running.status).toBe("running");
+        persistedRun = await runs.save({ ...running, status: "stopping" });
+        processHost.simulateApiProcessExit();
+        const process = initialRuntime.activeProcesses()[0];
+        expect(process).toBeDefined();
+        if (outcome === "absent") initialRuntime.emitNormalExit(process!);
+        if (outcome === "exited") initialRuntime.emitUnexpectedExit(process!);
+      } finally {
+        await initialDatabase.destroy();
+        initialOwner.close();
+      }
+
+      if (persistedRun === undefined)
+        throw new Error("Expected persisted stopping record");
+      const recoveryOwner = acquireRootOwnership(paths.databasePath);
+      const recoveryDatabase = createAppDatabase(recoveryOwner);
+      try {
+        const profiles = new SqliteProfileRepository(recoveryDatabase);
+        const runs = new SqliteBrowserRunRepository(recoveryDatabase);
+        const recoveryRuntime = new FakeBrowserRuntime({
+          processHost,
+          recoveryPlans:
+            outcome === "absent"
+              ? [{ outcome: "absent" }]
+              : outcome === "unknown"
+                ? [{ outcome: "unknown" }]
+                : [],
+        });
+        const service = new BrowserLifecycleService(
+          profiles,
+          runs,
+          recoveryRuntime,
+          new ProfileOperationMutex(),
+          {
+            profileDirectoryFor: (profileId) => `C:/profiles/${profileId}`,
+            now: () => "2026-10-02T10:01:00.000Z",
+            createRunId: () => `retry-${outcome}`,
+          },
+        );
+        expect(await runs.findById(persistedRun.id)).toEqual(persistedRun);
+        await expect(service.recoverPersistedRuns()).resolves.toMatchObject([
+          { id: persistedRun.id, status, failureCode },
+        ]);
+        const recovered = await runs.findById(persistedRun.id);
+        expect(recovered).toMatchObject({ status, failureCode });
+        expect(recoveryRuntime.recoveryCalls).toEqual([
+          {
+            runId: persistedRun.id,
+            profileId: profile.id,
+            runCreatedAt: persistedRun.createdAt,
+            profileDirectory: `C:/profiles/${profile.id}`,
+            processPid: persistedRun.processPid,
+            processIdentity: persistedRun.processIdentity,
+          },
+        ]);
+        expect(recoveryRuntime.stopCalls).toEqual([]);
+        expect(recoveryRuntime.launchCalls).toEqual([]);
+
+        if (status === "running" || status === "recovery_required") {
+          expect(await runs.findActiveByProfileId(profile.id)).toEqual(recovered);
+          await expect(service.start(profile.id)).rejects.toMatchObject({
+            code: "ACTIVE_BROWSER_RUN_CONFLICT",
+          });
+          await expect(
+            runs.create({
+              ...persistedRun,
+              id: "overlapping-run",
+              status: "starting",
+              processPid: null,
+              processIdentity: null,
+              failureCode: null,
+              endedAt: null,
+            }),
+          ).rejects.toThrow();
+          if (status === "running") {
+            await expect(service.stop(profile.id)).resolves.toMatchObject({
+              accepted: true,
+              run: { id: persistedRun.id, status: "stopping" },
+            });
+            await vi.waitFor(() => expect(service.pendingTaskCount).toBe(0));
+            expect(await runs.findById(persistedRun.id)).toMatchObject({
+              status: "stopped",
+            });
+            expect(recoveryRuntime.stopCalls).toHaveLength(1);
+          } else {
+            await expect(service.stop(profile.id)).rejects.toMatchObject({
+              code: "BROWSER_RUNTIME_RECOVERY_REQUIRED",
+            });
+            expect(recoveryRuntime.stopCalls).toEqual([]);
+          }
+        } else {
+          expect(recovered?.endedAt).not.toBeNull();
+          expect(await runs.findActiveByProfileId(profile.id)).toBeNull();
+          await expect(service.stop(profile.id)).resolves.toEqual({
+            accepted: false,
+            run: recovered,
+          });
+          await service.start(profile.id);
+          await vi.waitFor(() => expect(service.pendingTaskCount).toBe(0));
+          expect(await runs.findLatestByProfileId(profile.id)).toMatchObject({
+            id: `retry-${outcome}`,
+            status: "running",
+          });
+          expect(await runs.findById(persistedRun.id)).toEqual(recovered);
+        }
+        expect(service.pendingEventErrors).toEqual([]);
+      } finally {
+        await recoveryDatabase.destroy();
+        recoveryOwner.close();
+      }
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  },
+);

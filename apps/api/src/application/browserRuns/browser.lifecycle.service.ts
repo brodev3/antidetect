@@ -49,20 +49,53 @@ interface RuntimeHandleRecord {
 type TimedResult<T> =
   | { readonly kind: "resolved"; readonly value: T }
   | { readonly kind: "rejected" }
-  | { readonly kind: "timed_out" };
+  | { readonly kind: "timed_out" }
+  | { readonly kind: "interrupted" };
+
+interface ConfirmedExitOutcome {
+  readonly status: "stopped" | "failed";
+  readonly failureCode: string | null;
+}
+
+function classifyConfirmedExit(
+  run: BrowserRun,
+  exit: RuntimeExit,
+  cleanupFailureCode: string | undefined,
+): ConfirmedExitOutcome {
+  if (cleanupFailureCode !== undefined) {
+    return { status: "failed", failureCode: cleanupFailureCode };
+  }
+  if (run.status === "starting") {
+    return { status: "failed", failureCode: "RUNTIME_EXIT_BEFORE_RUNNING" };
+  }
+  if (exit.kind === "normal") {
+    return { status: "stopped", failureCode: null };
+  }
+  return {
+    status: "failed",
+    failureCode:
+      exit.kind === "abnormal"
+        ? "RUNTIME_UNEXPECTED_EXIT"
+        : "RUNTIME_EXIT_REASON_UNKNOWN",
+  };
+}
 
 const defaultLaunchTimeoutMs = 30_000;
 const defaultRecoveryTimeoutMs = 10_000;
 const defaultStopTimeoutMs = 10_000;
 const defaultShutdownTimeoutMs = 5_000;
+const interruptedStopFailureCode = "RUNTIME_STOP_INTERRUPTED";
 
 async function settleWithin<T>(
   promise: Promise<T>,
   timeoutMs: number,
+  interruptSignal?: AbortSignal,
 ): Promise<TimedResult<T>> {
+  if (interruptSignal?.aborted) return { kind: "interrupted" };
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let onInterrupt: (() => void) | undefined;
   try {
-    return await Promise.race([
+    const candidates: Promise<TimedResult<T>>[] = [
       promise.then(
         (value): TimedResult<T> => ({ kind: "resolved", value }),
         (): TimedResult<T> => ({ kind: "rejected" }),
@@ -70,9 +103,20 @@ async function settleWithin<T>(
       new Promise<TimedResult<T>>((resolve) => {
         timer = setTimeout(() => resolve({ kind: "timed_out" }), timeoutMs);
       }),
-    ]);
+    ];
+    if (interruptSignal !== undefined) {
+      candidates.push(
+        new Promise<TimedResult<T>>((resolve) => {
+          onInterrupt = () => resolve({ kind: "interrupted" });
+          interruptSignal.addEventListener("abort", onInterrupt, { once: true });
+        }),
+      );
+    }
+    return await Promise.race(candidates);
   } finally {
     if (timer !== undefined) clearTimeout(timer);
+    if (onInterrupt !== undefined)
+      interruptSignal?.removeEventListener("abort", onInterrupt);
   }
 }
 
@@ -85,10 +129,11 @@ export class BrowserLifecycleService {
   private readonly stopTimeoutMs: number;
   private readonly shutdownTimeoutMs: number;
   private readonly handles = new Map<string, RuntimeHandleRecord>();
-  private readonly expectedStops = new Set<string>();
-  private readonly cleanupStops = new Set<string>();
+  private readonly cleanupFailureCodes = new Map<string, string>();
   private readonly eventErrors: unknown[] = [];
   private readonly backgroundTasks = new Set<Promise<void>>();
+  private readonly runOperations = new Map<string, Set<Promise<void>>>();
+  private readonly recoveryWaitController = new AbortController();
   private shutdownRequested = false;
   private shutdownFinalized = false;
   private shutdownPromise: Promise<void> | undefined;
@@ -139,7 +184,9 @@ export class BrowserLifecycleService {
     profileId: string,
     fingerprintEnabled: boolean,
   ): Promise<Profile> {
+    this.assertAcceptingCommands();
     return this.mutex.runExclusive(profileId, async () => {
+      this.assertAcceptingCommands();
       const profile = await this.profiles.findById(profileId);
       if (profile === null) {
         throw new ProfileNotFoundError(profileId);
@@ -197,7 +244,7 @@ export class BrowserLifecycleService {
         endedAt: null,
       };
       await this.runs.create(startingRun);
-      this.schedule(() =>
+      this.schedule(startingRun.id, () =>
         this.performLaunch(startingRun, {
           runId: startingRun.id,
           profileId: profile.id,
@@ -225,6 +272,7 @@ export class BrowserLifecycleService {
       if (
         run.status !== "starting" &&
         run.status !== "running" &&
+        run.status !== "stopping" &&
         run.status !== "recovery_required"
       ) {
         continue;
@@ -255,7 +303,16 @@ export class BrowserLifecycleService {
         throw new BrowserRunStartingError(activeRun.id);
       }
       if (activeRun.status === "stopping") {
-        return { accepted: true, run: activeRun };
+        if (this.runOperations.has(activeRun.id)) {
+          return { accepted: true, run: activeRun };
+        }
+        const recovery = await this.saveStatus(activeRun, "recovery_required", {
+          failureCode: interruptedStopFailureCode,
+        });
+        throw new BrowserRuntimeRecoveryRequiredError(
+          recovery.id,
+          interruptedStopFailureCode,
+        );
       }
       if (activeRun.status === "recovery_required") {
         throw new BrowserRuntimeRecoveryRequiredError(
@@ -278,64 +335,42 @@ export class BrowserLifecycleService {
       const stoppingRun = await this.saveStatus(activeRun, "stopping", {
         failureCode: null,
       });
-      this.expectedStops.add(activeRun.id);
-      this.schedule(() => this.performStop(stoppingRun, handle.process));
+      this.schedule(stoppingRun.id, () =>
+        this.performStop(stoppingRun, handle.process),
+      );
       return { accepted: true, run: stoppingRun };
     });
   }
 
   async handleExit(runId: string, exit: RuntimeExit): Promise<BrowserRun> {
-    // The first contract stores only a stable failure code; raw exit details remain ephemeral.
-    void exit;
-    const initialRun = await this.runs.findById(runId);
-    if (initialRun === null) {
-      throw new BrowserRunNotFoundError(runId);
-    }
-
-    return this.mutex.runExclusive(initialRun.profileId, async () => {
-      const currentRun = await this.runs.findById(runId);
-      if (currentRun === null) {
-        throw new BrowserRunNotFoundError(runId);
-      }
-      if (this.shutdownFinalized) return currentRun;
-
-      if (isBrowserRunTerminal(currentRun.status)) {
-        this.unregisterHandle(runId);
-        return currentRun;
-      }
-
-      const expected = this.expectedStops.has(runId);
-      const cleanup = this.cleanupStops.has(runId);
-      const nextStatus: BrowserRunStatus = expected && !cleanup ? "stopped" : "failed";
-      const updated = await this.saveStatus(currentRun, nextStatus, {
-        failureCode: cleanup
-          ? currentRun.failureCode
-          : expected
-            ? null
-            : "RUNTIME_UNEXPECTED_EXIT",
-      });
-      this.unregisterHandle(runId);
-      this.expectedStops.delete(runId);
-      this.cleanupStops.delete(runId);
-      return updated;
-    });
+    const run = await this.requireRun(runId);
+    return this.completeConfirmedExit(run, exit);
   }
 
-  private schedule(operation: () => Promise<void>): void {
+  private schedule(runId: string, operation: () => Promise<void>): void {
     if (this.shutdownFinalized) return;
     const task = Promise.resolve().then(operation);
-    this.track(task);
+    this.track(task, runId);
   }
 
-  private track(task: Promise<void>): void {
+  private track(task: Promise<void>, runId?: string): void {
     if (this.shutdownFinalized) return;
     this.backgroundTasks.add(task);
+    if (runId !== undefined) {
+      const operations = this.runOperations.get(runId) ?? new Set<Promise<void>>();
+      operations.add(task);
+      this.runOperations.set(runId, operations);
+    }
 
     const onSuccess = (): void => {
       this.backgroundTasks.delete(task);
+      if (runId === undefined) return;
+      const operations = this.runOperations.get(runId);
+      operations?.delete(task);
+      if (operations?.size === 0) this.runOperations.delete(runId);
     };
     const onError = (error: unknown): void => {
-      this.backgroundTasks.delete(task);
+      onSuccess();
       this.eventErrors.push(error);
     };
 
@@ -353,17 +388,18 @@ export class BrowserLifecycleService {
       return this.runtime.launch(input);
     });
     const outcome = await settleWithin(launchPromise, this.launchTimeoutMs);
-    if (this.shutdownFinalized) return;
+    if (this.shutdownFinalized || outcome.kind === "interrupted") return;
     if (outcome.kind === "timed_out") {
-      await this.updateRun(run, "recovery_required", {
-        failureCode: "RUNTIME_LAUNCH_TIMEOUT",
-      });
       this.track(
         launchPromise.then(
           (late) => this.completeLateLaunch(run, late),
           () => undefined,
         ),
+        run.id,
       );
+      await this.updateRun(run, "recovery_required", {
+        failureCode: "RUNTIME_LAUNCH_TIMEOUT",
+      });
       return;
     }
     if (outcome.kind === "rejected") {
@@ -376,28 +412,50 @@ export class BrowserLifecycleService {
   }
 
   private async recoverPersistedRun(run: BrowserRun): Promise<BrowserRun> {
-    return this.mutex.runExclusive(run.profileId, async () => {
-      const current = await this.requireRun(run.id);
+    const task = this.mutex.runExclusive(run.profileId, async () => {
+      let current = await this.requireRun(run.id);
+      if (this.shutdownRequested) return current;
       if (
         current.status !== "starting" &&
         current.status !== "running" &&
+        current.status !== "stopping" &&
         current.status !== "recovery_required"
       ) {
         return current;
       }
+      if (this.runOperations.has(current.id)) return current;
+      if (current.status === "stopping") {
+        current = await this.saveStatus(current, "recovery_required", {
+          failureCode: interruptedStopFailureCode,
+        });
+      }
+      if (this.shutdownRequested) return current;
 
       const recoveryInput: RuntimeRecoveryInput = {
         runId: current.id,
         profileId: current.profileId,
+        runCreatedAt: current.createdAt,
+        profileDirectory: this.options.profileDirectoryFor(current.profileId),
         processPid: current.processPid,
         processIdentity: current.processIdentity,
       };
-      const outcome = await settleWithin(
-        Promise.resolve().then((): Promise<RuntimeRecoveryResult> =>
-          this.runtime.recover(recoveryInput),
-        ),
-        this.recoveryTimeoutMs,
+      const recoveryPromise = Promise.resolve().then(
+        (): Promise<RuntimeRecoveryResult> => this.runtime.recover(recoveryInput),
       );
+      // A timed-out lookup still runs. Its late result cannot apply to a stale snapshot.
+      this.track(
+        recoveryPromise.then(
+          () => undefined,
+          () => undefined,
+        ),
+        current.id,
+      );
+      const outcome = await settleWithin(
+        recoveryPromise,
+        this.recoveryTimeoutMs,
+        this.recoveryWaitController.signal,
+      );
+      if (this.shutdownFinalized || outcome.kind === "interrupted") return current;
       if (outcome.kind === "timed_out") {
         return this.saveStatus(current, "recovery_required", {
           failureCode: "RUNTIME_RECOVERY_TIMEOUT",
@@ -416,14 +474,19 @@ export class BrowserLifecycleService {
         });
       }
       if (recovery.status === "absent") {
-        return this.saveStatus(current, "failed", {
-          failureCode: "RUNTIME_PROCESS_NOT_FOUND_DURING_RECOVERY",
+        const failed = await this.saveStatus(current, "failed", {
+          failureCode:
+            this.cleanupFailureCodes.get(current.id) ??
+            "RUNTIME_PROCESS_NOT_FOUND_DURING_RECOVERY",
         });
+        if (isBrowserRunTerminal(failed.status)) {
+          this.unregisterHandle(current.id);
+          this.cleanupFailureCodes.delete(current.id);
+        }
+        return failed;
       }
       if (recovery.status === "exited") {
-        return this.saveStatus(current, "failed", {
-          failureCode: "RUNTIME_EXIT_DURING_RECOVERY",
-        });
+        return this.saveConfirmedExit(current, recovery.exit);
       }
       if (
         (current.processPid !== null && recovery.process.pid !== current.processPid) ||
@@ -435,23 +498,32 @@ export class BrowserLifecycleService {
         });
       }
 
-      if (!this.handles.has(current.id)) {
-        this.registerHandle(current.id, recovery.process);
-      }
+      this.unregisterHandle(current.id);
+      this.registerHandle(current.id, recovery.process);
+      let recovered = current;
       if (
         current.status !== "running" ||
         current.processPid !== recovery.process.pid ||
         current.processIdentity !== recovery.process.processIdentity ||
         current.failureCode !== null
       ) {
-        return this.saveStatus(current, "running", {
+        recovered = await this.saveStatus(current, "running", {
           processPid: recovery.process.pid,
           processIdentity: recovery.process.processIdentity,
           failureCode: null,
         });
       }
-      return current;
+      if (recovered.status === "running") this.cleanupFailureCodes.delete(current.id);
+      return recovered;
     });
+    // Include result persistence in shutdown draining, not only the runtime lookup.
+    this.track(
+      task.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    return task;
   }
 
   private async completeLaunch(
@@ -510,9 +582,8 @@ export class BrowserLifecycleService {
     await this.mutex.runExclusive(run.profileId, async () => {
       const current = await this.requireRun(run.id);
       if (this.shutdownFinalized || isBrowserRunTerminal(current.status)) return;
+      this.cleanupFailureCodes.set(run.id, failureCode);
       this.registerHandle(run.id, process);
-      this.expectedStops.add(run.id);
-      this.cleanupStops.add(run.id);
       await this.saveStatus(current, "recovery_required", {
         processPid: process.pid,
         processIdentity: process.processIdentity,
@@ -529,17 +600,18 @@ export class BrowserLifecycleService {
       return this.runtime.stop(process, { timeoutMs: this.stopTimeoutMs });
     });
     const outcome = await settleWithin(stopPromise, this.stopTimeoutMs);
-    if (this.shutdownFinalized) return;
+    if (this.shutdownFinalized || outcome.kind === "interrupted") return;
     if (outcome.kind === "timed_out") {
-      await this.updateRun(run, "recovery_required", {
-        failureCode: "RUNTIME_STOP_TIMEOUT",
-      });
       this.track(
         stopPromise.then(
           (late) => this.completeCleanup(run, late, failureCode),
           () => undefined,
         ),
+        run.id,
       );
+      await this.updateRun(run, "recovery_required", {
+        failureCode: "RUNTIME_STOP_TIMEOUT",
+      });
       return;
     }
     if (outcome.kind === "rejected") {
@@ -563,10 +635,7 @@ export class BrowserLifecycleService {
       });
       return;
     }
-    await this.updateRun(run, "failed", { failureCode });
-    this.unregisterHandle(run.id);
-    this.expectedStops.delete(run.id);
-    this.cleanupStops.delete(run.id);
+    await this.completeConfirmedExit(run, result.exit, failureCode);
   }
 
   private async performStop(run: BrowserRun, process: RuntimeProcess): Promise<void> {
@@ -577,17 +646,18 @@ export class BrowserLifecycleService {
       return this.runtime.stop(process, { timeoutMs: this.stopTimeoutMs });
     });
     const outcome = await settleWithin(stopPromise, this.stopTimeoutMs);
-    if (this.shutdownFinalized) return;
+    if (this.shutdownFinalized || outcome.kind === "interrupted") return;
     if (outcome.kind === "timed_out") {
-      await this.updateRun(run, "recovery_required", {
-        failureCode: "RUNTIME_STOP_TIMEOUT",
-      });
       this.track(
         stopPromise.then(
           (late) => this.completeStop(run, late),
           () => undefined,
         ),
+        run.id,
       );
+      await this.updateRun(run, "recovery_required", {
+        failureCode: "RUNTIME_STOP_TIMEOUT",
+      });
       return;
     }
     if (outcome.kind === "rejected") {
@@ -610,9 +680,41 @@ export class BrowserLifecycleService {
       });
       return;
     }
-    await this.updateRun(run, "stopped", { failureCode: null });
+    await this.completeConfirmedExit(run, result.exit);
+  }
+
+  private async completeConfirmedExit(
+    run: BrowserRun,
+    exit: RuntimeExit,
+    cleanupFailureCode?: string,
+  ): Promise<BrowserRun> {
+    return this.mutex.runExclusive(run.profileId, async () => {
+      const current = await this.requireRun(run.id);
+      return this.saveConfirmedExit(current, exit, cleanupFailureCode);
+    });
+  }
+
+  /** The caller must hold the profile operation mutex and supply the current run. */
+  private async saveConfirmedExit(
+    run: BrowserRun,
+    exit: RuntimeExit,
+    cleanupFailureCode?: string,
+  ): Promise<BrowserRun> {
+    if (this.shutdownFinalized) return run;
+    let updated = run;
+    if (!isBrowserRunTerminal(run.status)) {
+      const outcome = classifyConfirmedExit(
+        run,
+        exit,
+        cleanupFailureCode ?? this.cleanupFailureCodes.get(run.id),
+      );
+      updated = await this.saveStatus(run, outcome.status, {
+        failureCode: outcome.failureCode,
+      });
+    }
     this.unregisterHandle(run.id);
-    this.expectedStops.delete(run.id);
+    this.cleanupFailureCodes.delete(run.id);
+    return updated;
   }
 
   private async requireRun(runId: string): Promise<BrowserRun> {
@@ -693,14 +795,18 @@ export class BrowserLifecycleService {
 
   private async drainForShutdown(): Promise<void> {
     this.shutdownRequested = true;
+    // Stop waiting for recovery before acquiring locks to quarantine unfinished runs.
+    // The runtime lookup itself remains tracked until it actually settles.
+    this.recoveryWaitController.abort();
+    await this.mutex.waitForIdle();
     const drained = await this.drainBackgroundTasks();
     const failureCode = drained
       ? "RUNTIME_SHUTDOWN_STATE_UNKNOWN"
       : "RUNTIME_SHUTDOWN_TIMEOUT";
     const occupyingRuns = await this.runs.listOccupying();
 
+    // Recovery may still be saving a running/recovery_required record on the deadline.
     for (const run of occupyingRuns) {
-      if (run.status !== "starting" && run.status !== "stopping") continue;
       await this.mutex.runExclusive(run.profileId, async () => {
         const current = await this.requireRun(run.id);
         if (current.status !== "starting" && current.status !== "stopping") return;

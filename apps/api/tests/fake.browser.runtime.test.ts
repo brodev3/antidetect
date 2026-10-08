@@ -10,6 +10,7 @@ const input = {
   profileDirectory: "C:/profiles/profile-001",
   identityRef: "identity-001",
 } as const;
+const runCreatedAt = "2026-09-22T10:00:00.000Z";
 
 describe("FakeBrowserRuntime", () => {
   test("launches a deterministic process and emits a stop exit", async () => {
@@ -34,9 +35,9 @@ describe("FakeBrowserRuntime", () => {
 
     await expect(runtime.stop(process, { timeoutMs: 5000 })).resolves.toEqual({
       status: "stopped",
-      exit: { code: 0, signal: null },
+      exit: { kind: "normal", code: 0, signal: null },
     });
-    expect(exits).toEqual([{ code: 0, signal: null }]);
+    expect(exits).toEqual([{ kind: "normal", code: 0, signal: null }]);
     expect(runtime.activeProcesses()).toEqual([]);
     unsubscribe();
   });
@@ -87,7 +88,7 @@ describe("FakeBrowserRuntime", () => {
       stopPlans: [
         { outcome: "timeout" },
         { outcome: "fail", failureCode: "STOP_FAILED" },
-        { outcome: "success", exit: { code: 0, signal: null } },
+        { outcome: "success", exit: { kind: "normal", code: 0, signal: null } },
       ],
     });
     const launch = await runtime.launch(input);
@@ -128,12 +129,46 @@ describe("FakeBrowserRuntime", () => {
 
     runtime.emitUnexpectedExit(process, { code: 17, signal: "SIGTERM" });
 
-    expect(exits).toEqual([{ code: 17, signal: "SIGTERM" }]);
+    expect(exits).toEqual([{ kind: "abnormal", code: 17, signal: "SIGTERM" }]);
     await expect(runtime.stop(process, { timeoutMs: 100 })).resolves.toEqual({
       status: "stopped",
-      exit: { code: 17, signal: "SIGTERM" },
+      exit: { kind: "abnormal", code: 17, signal: "SIGTERM" },
     });
   });
+
+  test.each([
+    { method: "emitNormalExit", kind: "normal" },
+    { method: "emitUnexpectedExit", kind: "abnormal" },
+    { method: "emitUnknownExit", kind: "unknown" },
+  ] as const)(
+    "preserves $kind classification across notifications, stop, and recovery",
+    async ({ method, kind }) => {
+      const runtime = new FakeBrowserRuntime();
+      const launch = await runtime.launch(input);
+      if (launch.status !== "started") throw new Error("Expected fake launch to start");
+      const process = launch.process;
+      const exits: unknown[] = [];
+      process.onExit((exit) => exits.push(exit));
+
+      runtime[method](process, { code: 0, signal: null });
+      runtime[method](process, { code: 19, signal: "SIGTERM" });
+      const exit = { kind, code: 0, signal: null };
+      expect(exits).toEqual([exit]);
+      expect(runtime.activeProcesses()).toEqual([]);
+      await expect(runtime.stop(process, { timeoutMs: 100 })).resolves.toEqual({
+        status: "stopped",
+        exit,
+      });
+      await expect(
+        runtime.recover({
+          ...input,
+          runCreatedAt,
+          processPid: process.pid,
+          processIdentity: process.processIdentity,
+        }),
+      ).resolves.toEqual({ status: "exited", exit });
+    },
+  );
 
   test("reattaches after the API owner exits and resumes exit notifications", async () => {
     const processHost = new FakeBrowserProcessHost();
@@ -148,6 +183,8 @@ describe("FakeBrowserRuntime", () => {
     const recovery = await restartedRuntime.recover({
       runId: input.runId,
       profileId: input.profileId,
+      runCreatedAt,
+      profileDirectory: input.profileDirectory,
       processPid: launch.process.pid ?? 0,
       processIdentity: launch.process.processIdentity,
     });
@@ -160,11 +197,13 @@ describe("FakeBrowserRuntime", () => {
     recovery.process.onExit((exit) => exits.push(exit));
     restartedRuntime.emitUnexpectedExit(recovery.process, { code: 19, signal: null });
 
-    expect(exits).toEqual([{ code: 19, signal: null }]);
+    expect(exits).toEqual([{ kind: "abnormal", code: 19, signal: null }]);
     expect(restartedRuntime.recoveryCalls).toEqual([
       {
         runId: input.runId,
         profileId: input.profileId,
+        runCreatedAt,
+        profileDirectory: input.profileDirectory,
         processPid: 4100,
         processIdentity: "profile-001:run-001:fake-process-001",
       },
@@ -183,6 +222,8 @@ describe("FakeBrowserRuntime", () => {
       restartedRuntime.recover({
         runId: input.runId,
         profileId: input.profileId,
+        runCreatedAt,
+        profileDirectory: input.profileDirectory,
         processPid: null,
         processIdentity: null,
       }),
@@ -191,10 +232,37 @@ describe("FakeBrowserRuntime", () => {
       {
         runId: input.runId,
         profileId: input.profileId,
+        runCreatedAt,
+        profileDirectory: input.profileDirectory,
         processPid: null,
         processIdentity: null,
       },
     ]);
+  });
+
+  test("does not reattach when the profile directory does not match", async () => {
+    const processHost = new FakeBrowserProcessHost();
+    const firstRuntime = new FakeBrowserRuntime({ processHost });
+    const launch = await firstRuntime.launch(input);
+    if (launch.status !== "started") {
+      throw new Error("Expected fake launch to start");
+    }
+    processHost.simulateApiProcessExit();
+
+    const restartedRuntime = new FakeBrowserRuntime({ processHost });
+    await expect(
+      restartedRuntime.recover({
+        runId: input.runId,
+        profileId: input.profileId,
+        runCreatedAt,
+        profileDirectory: "C:/profiles/another-profile",
+        processPid: launch.process.pid,
+        processIdentity: launch.process.processIdentity,
+      }),
+    ).resolves.toEqual({
+      status: "unknown",
+      failureCode: "RUNTIME_PROCESS_IDENTITY_UNVERIFIED",
+    });
   });
 
   test("does not reattach when the persisted process identity does not match", async () => {
@@ -210,6 +278,8 @@ describe("FakeBrowserRuntime", () => {
       restartedRuntime.recover({
         runId: input.runId,
         profileId: input.profileId,
+        runCreatedAt,
+        profileDirectory: input.profileDirectory,
         processPid: launch.process.pid ?? 0,
         processIdentity: "another-process-identity",
       }),

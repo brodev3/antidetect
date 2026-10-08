@@ -19,6 +19,7 @@ import type {
 } from "../src/application/profiles/profile.repository.ts";
 import type {
   BrowserRuntime,
+  RuntimeExit,
   RuntimeLaunchInput,
   RuntimeLaunchResult,
   RuntimeProcess,
@@ -33,6 +34,45 @@ import {
 } from "../src/infrastructure/runtime/fake.browser.runtime.ts";
 
 const timestamp = "2026-09-22T10:00:00.000Z";
+
+const confirmedExitCases = [
+  {
+    exit: { kind: "normal", code: 17, signal: null },
+    status: "stopped",
+    failureCode: null,
+  },
+  {
+    exit: { kind: "abnormal", code: 0, signal: null },
+    status: "failed",
+    failureCode: "RUNTIME_UNEXPECTED_EXIT",
+  },
+  {
+    exit: { kind: "unknown", code: 0, signal: null },
+    status: "failed",
+    failureCode: "RUNTIME_EXIT_REASON_UNKNOWN",
+  },
+] as const;
+
+function emitConfirmedExit(
+  runtime: FakeBrowserRuntime,
+  process: RuntimeProcess,
+  exit: RuntimeExit,
+): void {
+  if (exit.kind === "normal") runtime.emitNormalExit(process, exit);
+  else if (exit.kind === "abnormal") runtime.emitUnexpectedExit(process, exit);
+  else runtime.emitUnknownExit(process, exit);
+}
+
+function createGate(): {
+  readonly promise: Promise<void>;
+  readonly release: () => void;
+} {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
+}
 
 const firstProfile: Profile = {
   id: "profile-001",
@@ -146,6 +186,25 @@ class MemoryBrowserRunRepository implements BrowserRunRepository {
 
   all(): readonly BrowserRun[] {
     return [...this.runs.values()];
+  }
+}
+
+class DeferredCreateBrowserRunRepository extends MemoryBrowserRunRepository {
+  private readonly createGate = createGate();
+  private readonly createStartedGate = createGate();
+
+  override async create(run: BrowserRun): Promise<BrowserRun> {
+    this.createStartedGate.release();
+    await this.createGate.promise;
+    return super.create(run);
+  }
+
+  waitUntilCreateStarts(): Promise<void> {
+    return this.createStartedGate.promise;
+  }
+
+  releaseCreate(): void {
+    this.createGate.release();
   }
 }
 
@@ -271,6 +330,7 @@ function createService(
   runs = new MemoryBrowserRunRepository(),
   timeouts: {
     readonly launchTimeoutMs?: number;
+    readonly recoveryTimeoutMs?: number;
     readonly stopTimeoutMs?: number;
     readonly shutdownTimeoutMs?: number;
     readonly now?: () => string;
@@ -295,6 +355,7 @@ function createService(
         createRunId: () => `run-${++sequence}`,
         createFingerprintIdentityRef: () => `test-identity:generated-${++sequence}`,
         launchTimeoutMs: timeouts.launchTimeoutMs ?? 5_000,
+        recoveryTimeoutMs: timeouts.recoveryTimeoutMs ?? 5_000,
         stopTimeoutMs: timeouts.stopTimeoutMs ?? 5_000,
         shutdownTimeoutMs: timeouts.shutdownTimeoutMs ?? 5_000,
       },
@@ -308,6 +369,35 @@ async function flushRuntimeEvents(): Promise<void> {
 
 async function waitForBackgroundTasks(service: BrowserLifecycleService): Promise<void> {
   await vi.waitFor(() => expect(service.pendingTaskCount).toBe(0));
+}
+
+async function createInterruptedStop(runtime: FakeBrowserRuntime): Promise<{
+  readonly service: BrowserLifecycleService;
+  readonly runs: MemoryBrowserRunRepository;
+  readonly process: RuntimeProcess;
+  readonly run: BrowserRun;
+}> {
+  const { service, runs } = createService(runtime);
+  const launch = await runtime.launch({
+    runId: "persisted-stop",
+    profileId: firstProfile.id,
+    profileDirectory: `C:/profiles/${firstProfile.id}`,
+    identityRef: firstProfile.identityRef,
+  });
+  if (launch.status !== "started") throw new Error("Expected fake process to start");
+  const run: BrowserRun = {
+    id: "persisted-stop",
+    profileId: firstProfile.id,
+    status: "stopping",
+    processPid: launch.process.pid,
+    processIdentity: launch.process.processIdentity,
+    failureCode: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    endedAt: null,
+  };
+  await runs.create(run);
+  return { service, runs, process: launch.process, run };
 }
 
 describe("BrowserLifecycleService", () => {
@@ -368,6 +458,54 @@ describe("BrowserLifecycleService", () => {
       fingerprintEnabled: true,
       identityRef: "test-identity:generated-1",
     });
+  });
+
+  test("rejects fingerprint changes after shutdown", async () => {
+    const { service, profiles } = createService(new FakeBrowserRuntime());
+    const updateFingerprintSettings = vi.spyOn(profiles, "updateFingerprintSettings");
+
+    await service.prepareForShutdown();
+
+    await expect(service.updateFingerprintMode(firstProfile.id, false)).rejects.toThrow(
+      "Browser lifecycle is shutting down",
+    );
+    expect(updateFingerprintSettings).not.toHaveBeenCalled();
+    await expect(profiles.findById(firstProfile.id)).resolves.toEqual(firstProfile);
+  });
+
+  test("rejects a fingerprint change queued before shutdown", async () => {
+    const runs = new DeferredCreateBrowserRunRepository();
+    const { service, profiles } = createService(
+      new FakeBrowserRuntime(),
+      undefined,
+      runs,
+    );
+    const updateFingerprintSettings = vi.spyOn(profiles, "updateFingerprintSettings");
+    const start = service.start(firstProfile.id);
+    let update: Promise<Profile> | undefined;
+    let shutdown: Promise<void> | undefined;
+
+    try {
+      await runs.waitUntilCreateStarts();
+      update = service.updateFingerprintMode(firstProfile.id, false);
+      shutdown = service.prepareForShutdown();
+      runs.releaseCreate();
+
+      await expect(update).rejects.toThrow("Browser lifecycle is shutting down");
+      await expect(start).resolves.toMatchObject({ status: "starting" });
+      await shutdown;
+
+      expect(updateFingerprintSettings).not.toHaveBeenCalled();
+      await expect(profiles.findById(firstProfile.id)).resolves.toEqual(firstProfile);
+    } finally {
+      runs.releaseCreate();
+      await Promise.allSettled([
+        start,
+        update ?? Promise.resolve(),
+        shutdown ?? Promise.resolve(),
+      ]);
+      await waitForBackgroundTasks(service);
+    }
   });
 
   test.each(["starting", "running", "stopping", "recovery_required"] as const)(
@@ -477,6 +615,49 @@ describe("BrowserLifecycleService", () => {
     expect(runtime.inner.stopCalls).toEqual([]);
   });
 
+  test("waits for accepted start persistence before draining shutdown", async () => {
+    const runtime = new DeferredLaunchRuntime();
+    const runs = new DeferredCreateBrowserRunRepository();
+    const { service } = createService(runtime, undefined, runs, {
+      shutdownTimeoutMs: 20,
+    });
+    const start = service.start(firstProfile.id);
+    let shutdownCompleted = false;
+    let shutdown: Promise<void> | undefined;
+
+    try {
+      await runs.waitUntilCreateStarts();
+      shutdown = service.prepareForShutdown().then(() => {
+        shutdownCompleted = true;
+      });
+      await flushRuntimeEvents();
+
+      expect(shutdownCompleted).toBe(false);
+
+      runs.releaseCreate();
+      await expect(start).resolves.toMatchObject({ status: "starting" });
+      await runtime.waitUntilLaunchStarts();
+      await shutdown;
+
+      await expect(service.getLatest(firstProfile.id)).resolves.toMatchObject({
+        status: "recovery_required",
+        failureCode: "RUNTIME_SHUTDOWN_TIMEOUT",
+      });
+
+      runtime.releaseLaunch();
+      await waitForBackgroundTasks(service);
+      await expect(service.getLatest(firstProfile.id)).resolves.toMatchObject({
+        status: "recovery_required",
+        failureCode: "RUNTIME_SHUTDOWN_TIMEOUT",
+      });
+    } finally {
+      runs.releaseCreate();
+      runtime.releaseLaunch();
+      await Promise.allSettled([start, shutdown ?? Promise.resolve()]);
+      await waitForBackgroundTasks(service);
+    }
+  });
+
   test("keeps an unresolved stop occupied without issuing another stop", async () => {
     const runtime = new DeferredStopRuntime();
     const { service, runs } = createService(runtime, undefined, undefined, {
@@ -503,6 +684,189 @@ describe("BrowserLifecycleService", () => {
     expect(runtime.stopInvocations).toBe(1);
   });
 
+  test.each(["starting", "running", "stopping", "recovery_required"] as const)(
+    "bounds shutdown while a persisted $0 run is being recovered",
+    async (status) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      const runtime = new FakeBrowserRuntime();
+      const gate = createGate();
+      const entered = createGate();
+      const originalRecover = runtime.recover.bind(runtime);
+      vi.spyOn(runtime, "recover").mockImplementationOnce(async (input) => {
+        entered.release();
+        await gate.promise;
+        return originalRecover(input);
+      });
+      const { service, runs } = createService(runtime, undefined, undefined, {
+        recoveryTimeoutMs: 10_000,
+        shutdownTimeoutMs: 20,
+      });
+      const launch = await runtime.launch({
+        runId: "persisted-recovery",
+        profileId: firstProfile.id,
+        profileDirectory: `C:/profiles/${firstProfile.id}`,
+        identityRef: firstProfile.identityRef,
+      });
+      if (launch.status !== "started") throw new Error("Expected fake launch");
+      await runs.create({
+        id: "persisted-recovery",
+        profileId: firstProfile.id,
+        status,
+        processPid: status === "starting" ? null : launch.process.pid,
+        processIdentity: status === "starting" ? null : launch.process.processIdentity,
+        failureCode: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        endedAt: null,
+      });
+      const recovery = service.recoverPersistedRuns();
+      await entered.promise;
+      let finished = false;
+      const shutdown = service.prepareForShutdown().then(() => {
+        finished = true;
+      });
+      try {
+        await vi.advanceTimersByTimeAsync(20);
+        await flushRuntimeEvents();
+        expect(finished).toBe(true);
+        await shutdown;
+        const snapshot = await service.getLatest(firstProfile.id);
+        expect(snapshot).toMatchObject({
+          status: status === "running" ? "running" : "recovery_required",
+          failureCode:
+            status === "starting"
+              ? "RUNTIME_SHUTDOWN_TIMEOUT"
+              : status === "stopping"
+                ? "RUNTIME_STOP_INTERRUPTED"
+                : null,
+          endedAt: null,
+        });
+        expect(vi.getTimerCount()).toBe(0);
+        expect(service.pendingTaskCount).toBe(1);
+
+        gate.release();
+        await recovery;
+        await waitForBackgroundTasks(service);
+        expect(await service.getLatest(firstProfile.id)).toEqual(snapshot);
+        expect(runtime.stopCalls).toEqual([]);
+        expect(runtime.activeProcesses()).toHaveLength(1);
+        expect(service.pendingEventErrors).toEqual([]);
+      } finally {
+        gate.release();
+        await recovery;
+        await shutdown;
+        await waitForBackgroundTasks(service);
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  test.each([false, true])(
+    "does not start recovery after shutdown is requested (finalized=$0)",
+    async (finalized) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      const runtime = new DeferredStopRuntime();
+      const recover = vi.spyOn(runtime, "recover");
+      const { service, runs } = createService(runtime, undefined, undefined, {
+        shutdownTimeoutMs: 20,
+      });
+      await service.start(firstProfile.id);
+      await service.start(secondProfile.id);
+      await flushRuntimeEvents();
+      await waitForBackgroundTasks(service);
+      await service.stop(firstProfile.id);
+      await runtime.waitUntilStopStarts();
+      const shutdown = service.prepareForShutdown();
+      try {
+        if (finalized) {
+          await vi.advanceTimersByTimeAsync(20);
+          await shutdown;
+        }
+        const snapshot = await runs.listOccupying();
+        await expect(service.recoverPersistedRuns()).resolves.toEqual(snapshot);
+        expect(recover).not.toHaveBeenCalled();
+        expect(runtime.inner.activeProcesses()).toHaveLength(2);
+      } finally {
+        runtime.releaseStop();
+        await shutdown;
+        await waitForBackgroundTasks(service);
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  test.each([
+    { status: "running", deadline: false },
+    { status: "running", deadline: true },
+    { status: "recovery_required", deadline: false },
+    { status: "recovery_required", deadline: true },
+  ] as const)(
+    "waits for a recovery write before finalizing shutdown ($status, deadline=$deadline)",
+    async ({ status, deadline }) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      const runtime = new FakeBrowserRuntime({
+        recoveryPlans: status === "running" ? [{ outcome: "unknown" }] : [],
+      });
+      const { service, runs } = createService(runtime, undefined, undefined, {
+        shutdownTimeoutMs: 20,
+      });
+      const launch = await runtime.launch({
+        runId: "persisted-write",
+        profileId: firstProfile.id,
+        profileDirectory: `C:/profiles/${firstProfile.id}`,
+        identityRef: firstProfile.identityRef,
+      });
+      if (launch.status !== "started") throw new Error("Expected fake launch");
+      await runs.create({
+        id: "persisted-write",
+        profileId: firstProfile.id,
+        status,
+        processPid: launch.process.pid,
+        processIdentity: launch.process.processIdentity,
+        failureCode: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        endedAt: null,
+      });
+      const gate = createGate();
+      const entered = createGate();
+      const originalSave = runs.save.bind(runs);
+      vi.spyOn(runs, "save").mockImplementationOnce(async (run) => {
+        entered.release();
+        await gate.promise;
+        return originalSave(run);
+      });
+      const recovery = service.recoverPersistedRuns();
+      await entered.promise;
+      let finished = false;
+      const shutdown = service.prepareForShutdown().then(() => {
+        finished = true;
+      });
+      try {
+        await flushRuntimeEvents();
+        if (deadline) await vi.advanceTimersByTimeAsync(20);
+        expect(finished).toBe(false);
+        gate.release();
+        await recovery;
+        await shutdown;
+        const snapshot = await service.getLatest(firstProfile.id);
+        expect(snapshot?.status).toBe(
+          status === "running" ? "recovery_required" : "running",
+        );
+        runtime.emitUnexpectedExit(launch.process);
+        await flushRuntimeEvents();
+        expect(await service.getLatest(firstProfile.id)).toEqual(snapshot);
+        expect(service.pendingEventErrors).toEqual([]);
+      } finally {
+        gate.release();
+        await recovery;
+        await shutdown;
+        await waitForBackgroundTasks(service);
+        vi.useRealTimers();
+      }
+    },
+  );
+
   test("reattaches to the same process after an API restart and tracks its exit", async () => {
     const processHost = new FakeBrowserProcessHost();
     const profiles = new MemoryProfileRepository();
@@ -523,6 +887,8 @@ describe("BrowserLifecycleService", () => {
       {
         runId: "run-1",
         profileId: firstProfile.id,
+        runCreatedAt: timestamp,
+        profileDirectory: "C:/profiles/profile-001",
         processPid: 4100,
         processIdentity: "profile-001:run-1:fake-process-001",
       },
@@ -657,6 +1023,8 @@ describe("BrowserLifecycleService", () => {
       {
         runId: startingRun.id,
         profileId: firstProfile.id,
+        runCreatedAt: startingRun.createdAt,
+        profileDirectory: "C:/profiles/profile-001",
         processPid: null,
         processIdentity: null,
       },
@@ -789,6 +1157,8 @@ describe("BrowserLifecycleService", () => {
       {
         runId: persistedRun.id,
         profileId: persistedRun.profileId,
+        runCreatedAt: persistedRun.createdAt,
+        profileDirectory: "C:/profiles/profile-001",
         processPid: persistedRun.processPid,
         processIdentity: persistedRun.processIdentity,
       },
@@ -883,6 +1253,8 @@ describe("BrowserLifecycleService", () => {
       {
         runId: "run-1",
         profileId: firstProfile.id,
+        runCreatedAt: timestamp,
+        profileDirectory: "C:/profiles/profile-001",
         processPid: null,
         processIdentity: null,
       },
@@ -917,12 +1289,12 @@ describe("BrowserLifecycleService", () => {
       {
         id: "run-1",
         status: "failed",
-        failureCode: "RUNTIME_EXIT_DURING_RECOVERY",
+        failureCode: "RUNTIME_UNEXPECTED_EXIT",
       },
     ]);
     await expect(restarted.service.getLatest(firstProfile.id)).resolves.toMatchObject({
       status: "failed",
-      failureCode: "RUNTIME_EXIT_DURING_RECOVERY",
+      failureCode: "RUNTIME_UNEXPECTED_EXIT",
     });
   });
 
@@ -1032,7 +1404,7 @@ describe("BrowserLifecycleService", () => {
 
   test("stops a running profile and makes a repeated stop a no-op", async () => {
     const runtime = new FakeBrowserRuntime();
-    const { service } = createService(runtime);
+    const { service, runs } = createService(runtime);
     const started = await service.start(firstProfile.id);
     await waitForBackgroundTasks(service);
 
@@ -1041,11 +1413,73 @@ describe("BrowserLifecycleService", () => {
       run: { id: started.id, status: "stopping" },
     });
     await waitForBackgroundTasks(service);
+    const finished = await service.getLatest(firstProfile.id);
+    expect(finished).toMatchObject({
+      id: started.id,
+      status: "stopped",
+      failureCode: null,
+    });
+    expect(finished?.endedAt).not.toBeNull();
+    expect(await runs.findActiveByProfileId(firstProfile.id)).toBeNull();
+
     await expect(service.stop(firstProfile.id)).resolves.toMatchObject({
       accepted: false,
       run: { id: started.id, status: "stopped" },
     });
     expect(runtime.stopCalls).toHaveLength(1);
+  });
+
+  test("keeps occupancy until recovery persists the confirmed exit after stop-save failure", async () => {
+    const runtime = new DeferredStopRuntime();
+    const { service, runs } = createService(runtime);
+    const started = await service.start(firstProfile.id);
+    await waitForBackgroundTasks(service);
+
+    await expect(service.stop(firstProfile.id)).resolves.toMatchObject({
+      accepted: true,
+      run: { id: started.id, status: "stopping" },
+    });
+    await runtime.waitUntilStopStarts();
+    const persistenceError = new Error("Simulated terminal run persistence failure");
+    const save = runs.save.bind(runs);
+    let rejectStoppedPersistence = true;
+    vi.spyOn(runs, "save").mockImplementation(async (run) => {
+      if (run.status === "stopped" && rejectStoppedPersistence) {
+        throw persistenceError;
+      }
+      return save(run);
+    });
+
+    runtime.releaseStop();
+    await waitForBackgroundTasks(service);
+
+    expect(service.pendingEventErrors).toContain(persistenceError);
+    await expect(service.getLatest(firstProfile.id)).resolves.toMatchObject({
+      id: started.id,
+      status: "stopping",
+      endedAt: null,
+    });
+    await expect(runs.findActiveByProfileId(firstProfile.id)).resolves.toMatchObject({
+      id: started.id,
+      status: "stopping",
+    });
+    expect(runtime.inner.activeProcesses()).toEqual([]);
+
+    rejectStoppedPersistence = false;
+    await expect(service.recoverPersistedRuns()).resolves.toMatchObject([
+      {
+        id: started.id,
+        status: "stopped",
+        failureCode: null,
+      },
+    ]);
+    await expect(runs.findActiveByProfileId(firstProfile.id)).resolves.toBeNull();
+    await expect(service.getLatest(firstProfile.id)).resolves.toMatchObject({
+      id: started.id,
+      status: "stopped",
+      endedAt: expect.any(String),
+    });
+    expect(runtime.inner.recoveryCalls).toHaveLength(1);
   });
 
   test("rejects stop immediately during a delayed start", async () => {
@@ -1140,6 +1574,351 @@ describe("BrowserLifecycleService", () => {
     });
   });
 
+  test.each([false, true])(
+    "does not recover an unresolved launch (timed out=$0)",
+    async (timedOut) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const runtime = new DeferredLaunchRuntime();
+      const recover = vi.spyOn(runtime, "recover");
+      const { service, runs } = createService(runtime, undefined, undefined, {
+        launchTimeoutMs: 20,
+      });
+      try {
+        await service.start(firstProfile.id);
+        await runtime.waitUntilLaunchStarts();
+        if (timedOut) await vi.advanceTimersByTimeAsync(20);
+        const pending = await service.getLatest(firstProfile.id);
+        expect(pending?.status).toBe(timedOut ? "recovery_required" : "starting");
+
+        await expect(service.recoverPersistedRuns()).resolves.toEqual([pending]);
+        await expect(service.recoverPersistedRuns()).resolves.toEqual([pending]);
+        expect(recover).not.toHaveBeenCalled();
+        expect(await runs.findActiveByProfileId(firstProfile.id)).toEqual(pending);
+        await expect(service.start(firstProfile.id)).rejects.toMatchObject({
+          code: "ACTIVE_BROWSER_RUN_CONFLICT",
+        });
+
+        runtime.releaseLaunch();
+        await flushRuntimeEvents();
+        await waitForBackgroundTasks(service);
+        expect(await service.getLatest(firstProfile.id)).toMatchObject({
+          status: timedOut ? "failed" : "running",
+        });
+        if (!timedOut) {
+          await service.recoverPersistedRuns();
+          expect(recover).toHaveBeenCalledTimes(1);
+        }
+        expect(service.pendingEventErrors).toEqual([]);
+      } finally {
+        runtime.releaseLaunch();
+        await waitForBackgroundTasks(service);
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  test.each([false, true])(
+    "does not recover or duplicate an unresolved stop (cleanup=$0)",
+    async (cleanup) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const runtime = new FakeBrowserRuntime({
+        launchPlans: cleanup
+          ? [{ outcome: "fail-after-spawn", failureCode: "METADATA_UNKNOWN" }]
+          : [],
+      });
+      const gate = createGate();
+      const entered = createGate();
+      const originalStop = runtime.stop.bind(runtime);
+      const stop = vi.spyOn(runtime, "stop").mockImplementationOnce(async (...args) => {
+        entered.release();
+        await gate.promise;
+        return originalStop(...args);
+      });
+      const recover = vi.spyOn(runtime, "recover");
+      const { service } = createService(runtime, undefined, undefined, {
+        stopTimeoutMs: 20,
+      });
+      try {
+        await service.start(firstProfile.id);
+        if (!cleanup) {
+          await waitForBackgroundTasks(service);
+          await service.stop(firstProfile.id);
+        }
+        await entered.promise;
+        await vi.advanceTimersByTimeAsync(20);
+        const pending = await service.getLatest(firstProfile.id);
+        expect(pending).toMatchObject({
+          status: "recovery_required",
+          failureCode: "RUNTIME_STOP_TIMEOUT",
+        });
+        await expect(service.recoverPersistedRuns()).resolves.toEqual([pending]);
+        await expect(service.recoverPersistedRuns()).resolves.toEqual([pending]);
+        expect(recover).not.toHaveBeenCalled();
+        await expect(service.stop(firstProfile.id)).rejects.toMatchObject({
+          code: "BROWSER_RUNTIME_RECOVERY_REQUIRED",
+        });
+        await expect(service.start(firstProfile.id)).rejects.toMatchObject({
+          code: "ACTIVE_BROWSER_RUN_CONFLICT",
+        });
+        expect(stop).toHaveBeenCalledTimes(1);
+
+        await service.start(secondProfile.id);
+        await flushRuntimeEvents();
+        expect(await service.getLatest(secondProfile.id)).toMatchObject({
+          status: "running",
+        });
+        gate.release();
+        await waitForBackgroundTasks(service);
+        expect(await service.getLatest(firstProfile.id)).toMatchObject({
+          status: cleanup ? "failed" : "stopped",
+          failureCode: cleanup ? "METADATA_UNKNOWN" : null,
+        });
+        expect(stop).toHaveBeenCalledTimes(1);
+        expect(service.pendingEventErrors).toEqual([]);
+      } finally {
+        gate.release();
+        await waitForBackgroundTasks(service);
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  test("keeps a new run tracked after an older run's delayed stop response settles", async () => {
+    const runtime = new FakeBrowserRuntime();
+    const stopGate = createGate();
+    const stopEntered = createGate();
+    const launchGate = createGate();
+    const launchEntered = createGate();
+    const originalStop = runtime.stop.bind(runtime);
+    vi.spyOn(runtime, "stop").mockImplementationOnce(async (...args) => {
+      const result = await originalStop(...args);
+      stopEntered.release();
+      await stopGate.promise;
+      return result;
+    });
+    const recover = vi.spyOn(runtime, "recover");
+    const { service } = createService(runtime);
+    try {
+      const first = await service.start(firstProfile.id);
+      await waitForBackgroundTasks(service);
+      await service.stop(firstProfile.id);
+      await stopEntered.promise;
+      await flushRuntimeEvents();
+      expect(await service.getLatest(firstProfile.id)).toMatchObject({
+        id: first.id,
+        status: "stopped",
+      });
+      expect(service.pendingTaskCount).toBeGreaterThan(0);
+
+      const originalLaunch = runtime.launch.bind(runtime);
+      vi.spyOn(runtime, "launch").mockImplementationOnce(async (input) => {
+        launchEntered.release();
+        await launchGate.promise;
+        return originalLaunch(input);
+      });
+      const next = await service.start(firstProfile.id);
+      expect(next.id).not.toBe(first.id);
+      await launchEntered.promise;
+      stopGate.release();
+      await flushRuntimeEvents();
+      await expect(service.recoverPersistedRuns()).resolves.toEqual([next]);
+      expect(recover).not.toHaveBeenCalled();
+
+      launchGate.release();
+      await waitForBackgroundTasks(service);
+      expect(await service.getLatest(firstProfile.id)).toMatchObject({
+        id: next.id,
+        status: "running",
+      });
+      expect(runtime.stopCalls).toHaveLength(1);
+      expect(service.pendingEventErrors).toEqual([]);
+    } finally {
+      stopGate.release();
+      launchGate.release();
+      await waitForBackgroundTasks(service);
+    }
+  });
+
+  test.each(["fail", "throw"] as const)(
+    "allows recovery and a fresh stop after a late stop $0 settles",
+    async (outcome) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const runtime = new FakeBrowserRuntime({
+        stopPlans: outcome === "fail" ? [{ outcome: "fail" }] : [],
+      });
+      const gate = createGate();
+      const entered = createGate();
+      const originalStop = runtime.stop.bind(runtime);
+      const stop = vi.spyOn(runtime, "stop").mockImplementationOnce(async (...args) => {
+        entered.release();
+        await gate.promise;
+        if (outcome === "throw") throw new Error("Late stop result is unknown");
+        return originalStop(...args);
+      });
+      const recover = vi.spyOn(runtime, "recover");
+      const { service } = createService(runtime, undefined, undefined, {
+        stopTimeoutMs: 20,
+      });
+      try {
+        await service.start(firstProfile.id);
+        await waitForBackgroundTasks(service);
+        await service.stop(firstProfile.id);
+        await entered.promise;
+        await vi.advanceTimersByTimeAsync(20);
+        await service.recoverPersistedRuns();
+        expect(recover).not.toHaveBeenCalled();
+
+        gate.release();
+        await waitForBackgroundTasks(service);
+        expect(await service.getLatest(firstProfile.id)).toMatchObject({
+          status: "recovery_required",
+        });
+        await expect(service.recoverPersistedRuns()).resolves.toMatchObject([
+          { status: "running" },
+        ]);
+        await expect(service.stop(firstProfile.id)).resolves.toMatchObject({
+          accepted: true,
+          run: { status: "stopping" },
+        });
+        await waitForBackgroundTasks(service);
+        expect(stop).toHaveBeenCalledTimes(2);
+        expect(recover).toHaveBeenCalledTimes(1);
+        expect(await service.getLatest(firstProfile.id)).toMatchObject({
+          status: "stopped",
+        });
+        expect(service.pendingEventErrors).toEqual([]);
+      } finally {
+        gate.release();
+        await waitForBackgroundTasks(service);
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  test.each(["attached", "throw"] as const)(
+    "does not overlap timed-out recovery lookups and ignores a late $0 result",
+    async (lateResult) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const runtime = new FakeBrowserRuntime({ stopPlans: [{ outcome: "timeout" }] });
+      const gate = createGate();
+      const entered = createGate();
+      const originalRecover = runtime.recover.bind(runtime);
+      const recover = vi
+        .spyOn(runtime, "recover")
+        .mockImplementationOnce(async (input) => {
+          entered.release();
+          await gate.promise;
+          if (lateResult === "throw")
+            throw new Error("Late recovery result is unknown");
+          return originalRecover(input);
+        });
+      const { service } = createService(runtime, undefined, undefined, {
+        recoveryTimeoutMs: 20,
+      });
+      try {
+        await service.start(firstProfile.id);
+        await waitForBackgroundTasks(service);
+        await service.stop(firstProfile.id);
+        await waitForBackgroundTasks(service);
+        const firstLookup = service.recoverPersistedRuns();
+        await entered.promise;
+        await vi.advanceTimersByTimeAsync(20);
+        const pending = (await firstLookup)[0];
+        expect(pending).toMatchObject({
+          status: "recovery_required",
+          failureCode: "RUNTIME_RECOVERY_TIMEOUT",
+        });
+        await expect(service.recoverPersistedRuns()).resolves.toEqual([pending]);
+        await expect(service.recoverPersistedRuns()).resolves.toEqual([pending]);
+        expect(recover).toHaveBeenCalledTimes(1);
+        expect(service.pendingTaskCount).toBeGreaterThan(0);
+
+        gate.release();
+        await waitForBackgroundTasks(service);
+        expect(await service.getLatest(firstProfile.id)).toEqual(pending);
+        await expect(service.recoverPersistedRuns()).resolves.toMatchObject([
+          { status: "running" },
+        ]);
+        expect(recover).toHaveBeenCalledTimes(2);
+        expect(service.pendingEventErrors).toEqual([]);
+      } finally {
+        gate.release();
+        await waitForBackgroundTasks(service);
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  test.each(["launch", "stop", "cleanup"] as const)(
+    "tracks a late $0 result even if saving its timeout fails",
+    async (operation) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const runtime = new FakeBrowserRuntime({
+        launchPlans:
+          operation === "cleanup"
+            ? [{ outcome: "fail-after-spawn", failureCode: "METADATA_UNKNOWN" }]
+            : [],
+      });
+      const gate = createGate();
+      const entered = createGate();
+      if (operation === "launch") {
+        const originalLaunch = runtime.launch.bind(runtime);
+        vi.spyOn(runtime, "launch").mockImplementationOnce(async (input) => {
+          entered.release();
+          await gate.promise;
+          return originalLaunch(input);
+        });
+      } else {
+        const originalStop = runtime.stop.bind(runtime);
+        vi.spyOn(runtime, "stop").mockImplementationOnce(async (...args) => {
+          entered.release();
+          await gate.promise;
+          return originalStop(...args);
+        });
+      }
+      const recover = vi.spyOn(runtime, "recover");
+      const { service, runs } = createService(runtime, undefined, undefined, {
+        launchTimeoutMs: 20,
+        stopTimeoutMs: 20,
+      });
+      const persistenceError = new Error("Simulated timeout persistence failure");
+      try {
+        await service.start(firstProfile.id);
+        if (operation === "stop") {
+          await flushRuntimeEvents();
+          await waitForBackgroundTasks(service);
+          await service.stop(firstProfile.id);
+        }
+        await entered.promise;
+        runs.failNextSave = persistenceError;
+        await vi.advanceTimersByTimeAsync(20);
+        expect(service.pendingEventErrors).toEqual([persistenceError]);
+        expect(service.pendingTaskCount).toBeGreaterThan(0);
+        await service.recoverPersistedRuns();
+        expect(recover).not.toHaveBeenCalled();
+
+        gate.release();
+        await waitForBackgroundTasks(service);
+        expect(await service.getLatest(firstProfile.id)).toMatchObject({
+          status: operation === "stop" ? "stopped" : "failed",
+          failureCode:
+            operation === "stop"
+              ? null
+              : operation === "launch"
+                ? "RUNTIME_LAUNCH_TIMEOUT"
+                : "METADATA_UNKNOWN",
+        });
+        expect(await runs.findActiveByProfileId(firstProfile.id)).toBeNull();
+        expect(runtime.activeProcesses()).toEqual([]);
+        expect(service.pendingEventErrors).toEqual([persistenceError]);
+      } finally {
+        gate.release();
+        await waitForBackgroundTasks(service);
+        vi.useRealTimers();
+      }
+    },
+  );
+
   test("keeps occupancy after a stop timeout", async () => {
     const runtime = new FakeBrowserRuntime({
       stopPlans: [{ outcome: "timeout" }],
@@ -1183,6 +1962,579 @@ describe("BrowserLifecycleService", () => {
     await flushRuntimeEvents();
     expect(second.runs.all()).toMatchObject([{ status: "stopped", failureCode: null }]);
     expect(second.service.pendingEventErrors).toEqual([]);
+  });
+
+  test.each(confirmedExitCases)(
+    "classifies a spontaneous $exit.kind exit independently of its code",
+    async ({ exit, status, failureCode }) => {
+      const runtime = new FakeBrowserRuntime();
+      const { service, runs } = createService(runtime);
+      const started = await service.start(firstProfile.id);
+      await waitForBackgroundTasks(service);
+
+      const process = runtime.activeProcesses()[0];
+      expect(process).toBeDefined();
+      emitConfirmedExit(runtime, process!, exit);
+      await flushRuntimeEvents();
+      await waitForBackgroundTasks(service);
+
+      const finished = await service.getLatest(firstProfile.id);
+      expect(finished).toMatchObject({ id: started.id, status, failureCode });
+      expect(finished?.endedAt).not.toBeNull();
+      expect(await runs.findActiveByProfileId(firstProfile.id)).toBeNull();
+      expect(await service.stop(firstProfile.id)).toEqual({
+        accepted: false,
+        run: finished,
+      });
+      expect(runtime.stopCalls).toEqual([]);
+      expect(service.pendingEventErrors).toEqual([]);
+
+      const next = await service.start(firstProfile.id);
+      expect(next.id).not.toBe(started.id);
+      await waitForBackgroundTasks(service);
+      expect(await service.getLatest(firstProfile.id)).toMatchObject({
+        id: next.id,
+        status: "running",
+      });
+    },
+  );
+
+  test.each(
+    confirmedExitCases.flatMap((exitCase) =>
+      ([false, true] as const).flatMap((cleanup) =>
+        (["event-first", "result-first"] as const).map((order) => ({
+          ...exitCase,
+          cleanup,
+          order,
+        })),
+      ),
+    ),
+  )(
+    "classifies $exit.kind with $order (cleanup=$cleanup)",
+    async ({ exit, status, failureCode, cleanup, order }) => {
+      const runtime = new FakeBrowserRuntime({
+        launchPlans: cleanup
+          ? [{ outcome: "fail-after-spawn", failureCode: "METADATA_UNKNOWN" }]
+          : [],
+        stopPlans: [{ outcome: "success", exit }],
+      });
+      let nowSequence = 0;
+      const { service, runs } = createService(runtime, undefined, undefined, {
+        now: () => new Date(Date.parse(timestamp) + nowSequence++).toISOString(),
+      });
+      const gate = createGate();
+      if (order === "event-first") {
+        const originalStop = runtime.stop.bind(runtime);
+        vi.spyOn(runtime, "stop").mockImplementation(async (process, options) => {
+          const result = await originalStop(process, options);
+          await gate.promise;
+          return result;
+        });
+      } else {
+        const originalHandleExit = service.handleExit.bind(service);
+        vi.spyOn(service, "handleExit").mockImplementation(async (runId, event) => {
+          await gate.promise;
+          return originalHandleExit(runId, event);
+        });
+      }
+
+      try {
+        await service.start(firstProfile.id);
+        if (!cleanup) {
+          await waitForBackgroundTasks(service);
+          await service.stop(firstProfile.id);
+        }
+        await vi.waitFor(async () => {
+          expect(await service.getLatest(firstProfile.id)).toMatchObject({
+            status: cleanup ? "failed" : status,
+            failureCode: cleanup ? "METADATA_UNKNOWN" : failureCode,
+          });
+        });
+        const firstTerminalRun = await service.getLatest(firstProfile.id);
+        expect(runtime.activeProcesses()).toEqual([]);
+        expect(service.pendingTaskCount).toBeGreaterThan(0);
+
+        gate.release();
+        await flushRuntimeEvents();
+        await waitForBackgroundTasks(service);
+        expect(await service.getLatest(firstProfile.id)).toEqual(firstTerminalRun);
+        expect(await runs.findActiveByProfileId(firstProfile.id)).toBeNull();
+        expect(runtime.stopCalls).toHaveLength(1);
+        expect(service.pendingEventErrors).toEqual([]);
+      } finally {
+        gate.release();
+        await flushRuntimeEvents();
+        await waitForBackgroundTasks(service);
+      }
+    },
+  );
+
+  test.each(confirmedExitCases)(
+    "classifies an owned $exit.kind exit observed during API downtime",
+    async ({ exit, status, failureCode }) => {
+      const processHost = new FakeBrowserProcessHost();
+      const runtime = new FakeBrowserRuntime({ processHost });
+      const first = createService(runtime);
+      await first.service.start(firstProfile.id);
+      await waitForBackgroundTasks(first.service);
+
+      const process = runtime.activeProcesses()[0];
+      expect(process).toBeDefined();
+      processHost.simulateApiProcessExit();
+      emitConfirmedExit(runtime, process!, exit);
+
+      const restartedRuntime = new FakeBrowserRuntime({ processHost });
+      const restarted = createService(restartedRuntime, first.profiles, first.runs);
+      await expect(restarted.service.recoverPersistedRuns()).resolves.toMatchObject([
+        { id: "run-1", status, failureCode },
+      ]);
+      expect(await first.runs.findActiveByProfileId(firstProfile.id)).toBeNull();
+      expect(restartedRuntime.stopCalls).toEqual([]);
+      expect(restarted.service.pendingEventErrors).toEqual([]);
+    },
+  );
+
+  test.each(["event", "recovery"] as const)(
+    "fails a normal exit before running was persisted through $0",
+    async (source) => {
+      const processHost = new FakeBrowserProcessHost();
+      const runtime = new FakeBrowserRuntime({ processHost });
+      const first = createService(runtime);
+      const persistenceError = new Error(
+        "Simulated process metadata persistence failure",
+      );
+      first.runs.failNextSave = persistenceError;
+      await first.service.start(firstProfile.id);
+      await waitForBackgroundTasks(first.service);
+      expect(await first.service.getLatest(firstProfile.id)).toMatchObject({
+        status: "starting",
+      });
+      expect(first.service.pendingEventErrors).toEqual([persistenceError]);
+
+      const process = runtime.activeProcesses()[0];
+      expect(process).toBeDefined();
+      if (source === "recovery") processHost.simulateApiProcessExit();
+      runtime.emitNormalExit(process!);
+      let service = first.service;
+      if (source === "recovery") {
+        service = createService(
+          new FakeBrowserRuntime({ processHost }),
+          first.profiles,
+          first.runs,
+        ).service;
+        await service.recoverPersistedRuns();
+      }
+      await flushRuntimeEvents();
+      await waitForBackgroundTasks(service);
+      expect(await service.getLatest(firstProfile.id)).toMatchObject({
+        status: "failed",
+        failureCode: "RUNTIME_EXIT_BEFORE_RUNNING",
+      });
+      expect(await first.runs.findActiveByProfileId(firstProfile.id)).toBeNull();
+      expect(service.pendingEventErrors).toEqual(
+        source === "event" ? [persistenceError] : [],
+      );
+    },
+  );
+
+  test.each(confirmedExitCases)(
+    "fails a synchronously observed $exit.kind exit before running is persisted",
+    async ({ exit }) => {
+      const runtime = new FakeBrowserRuntime();
+      const launch = runtime.launch.bind(runtime);
+      vi.spyOn(runtime, "launch").mockImplementation(async (input) => {
+        const outcome = await launch(input);
+        if (outcome.status === "started") {
+          emitConfirmedExit(runtime, outcome.process, exit);
+        }
+        return outcome;
+      });
+      const { service, runs } = createService(runtime);
+      const persistenceError = new Error(
+        "Simulated process metadata persistence failure",
+      );
+      runs.failNextSave = persistenceError;
+
+      await service.start(firstProfile.id);
+      await flushRuntimeEvents();
+      await waitForBackgroundTasks(service);
+
+      expect(await service.getLatest(firstProfile.id)).toMatchObject({
+        status: "failed",
+        failureCode: "RUNTIME_EXIT_BEFORE_RUNNING",
+      });
+      expect(await runs.findActiveByProfileId(firstProfile.id)).toBeNull();
+      expect(runtime.activeProcesses()).toHaveLength(0);
+      expect(service.pendingEventErrors).toEqual([persistenceError]);
+    },
+  );
+
+  test.each(
+    confirmedExitCases.flatMap((exitCase) =>
+      (["timeout", "fail"] as const).map((outcome) => ({ ...exitCase, outcome })),
+    ),
+  )(
+    "preserves the launch failure after cleanup $outcome and a $exit.kind exit",
+    async ({ exit, outcome }) => {
+      const runtime = new FakeBrowserRuntime({
+        launchPlans: [{ outcome: "fail-after-spawn", failureCode: "METADATA_UNKNOWN" }],
+        stopPlans: [{ outcome }],
+      });
+      const { service } = createService(runtime);
+      await service.start(firstProfile.id);
+      await waitForBackgroundTasks(service);
+      expect(await service.getLatest(firstProfile.id)).toMatchObject({
+        status: "recovery_required",
+        failureCode:
+          outcome === "timeout" ? "RUNTIME_STOP_TIMEOUT" : "RUNTIME_STOP_FAILED",
+      });
+
+      const process = runtime.activeProcesses()[0];
+      expect(process).toBeDefined();
+      emitConfirmedExit(runtime, process!, exit);
+      await flushRuntimeEvents();
+      await waitForBackgroundTasks(service);
+      expect(await service.getLatest(firstProfile.id)).toMatchObject({
+        status: "failed",
+        failureCode: "METADATA_UNKNOWN",
+      });
+      expect(service.pendingEventErrors).toEqual([]);
+    },
+  );
+
+  test.each([
+    { outcome: "attached", status: "running", failureCode: null },
+    {
+      outcome: "absent",
+      status: "failed",
+      failureCode: "RUNTIME_PROCESS_NOT_FOUND_DURING_RECOVERY",
+    },
+    { outcome: "normal-exit", status: "stopped", failureCode: null },
+    {
+      outcome: "abnormal-exit",
+      status: "failed",
+      failureCode: "RUNTIME_UNEXPECTED_EXIT",
+    },
+    {
+      outcome: "unknown-exit",
+      status: "failed",
+      failureCode: "RUNTIME_EXIT_REASON_UNKNOWN",
+    },
+    {
+      outcome: "unknown",
+      status: "recovery_required",
+      failureCode: "RUNTIME_PROCESS_IDENTITY_UNVERIFIED",
+    },
+    {
+      outcome: "pid-mismatch",
+      status: "recovery_required",
+      failureCode: "RUNTIME_PROCESS_IDENTITY_MISMATCH",
+    },
+    {
+      outcome: "identity-mismatch",
+      status: "recovery_required",
+      failureCode: "RUNTIME_PROCESS_IDENTITY_MISMATCH",
+    },
+    {
+      outcome: "throw",
+      status: "recovery_required",
+      failureCode: "RUNTIME_RECOVERY_LOOKUP_FAILED",
+    },
+    {
+      outcome: "timeout",
+      status: "recovery_required",
+      failureCode: "RUNTIME_RECOVERY_TIMEOUT",
+    },
+  ] as const)(
+    "recovers an interrupted stopping run through $outcome",
+    async ({ outcome, status, failureCode }) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const runtime = new FakeBrowserRuntime();
+      const { service, runs, process, run } = await createInterruptedStop(runtime);
+      const lookupGate = createGate();
+      const lookupEntered = createGate();
+      const originalRecover = runtime.recover.bind(runtime);
+      if (outcome === "absent") {
+        runtime.emitNormalExit(process);
+        vi.spyOn(runtime, "recover").mockResolvedValue({ status: "absent" });
+      } else if (outcome === "normal-exit") runtime.emitNormalExit(process);
+      else if (outcome === "abnormal-exit") runtime.emitUnexpectedExit(process);
+      else if (outcome === "unknown-exit") runtime.emitUnknownExit(process);
+      else if (outcome === "unknown") {
+        vi.spyOn(runtime, "recover").mockResolvedValue({
+          status: "unknown",
+          failureCode: "RUNTIME_PROCESS_IDENTITY_UNVERIFIED",
+        });
+      } else if (outcome === "pid-mismatch" || outcome === "identity-mismatch") {
+        vi.spyOn(runtime, "recover").mockResolvedValue({
+          status: "attached",
+          process: {
+            ...process,
+            pid: outcome === "pid-mismatch" ? (process.pid ?? 0) + 1 : process.pid,
+            processIdentity:
+              outcome === "identity-mismatch"
+                ? "foreign-process"
+                : process.processIdentity,
+          },
+        });
+      } else if (outcome === "throw") {
+        vi.spyOn(runtime, "recover").mockRejectedValue(
+          new Error("Recovery lookup failed"),
+        );
+      } else if (outcome === "timeout") {
+        vi.spyOn(runtime, "recover").mockImplementationOnce(async (input) => {
+          lookupEntered.release();
+          await lookupGate.promise;
+          return originalRecover(input);
+        });
+      }
+      try {
+        const recovery = service.recoverPersistedRuns();
+        if (outcome === "timeout") {
+          await flushRuntimeEvents();
+          expect(service.pendingTaskCount).toBeGreaterThan(0);
+          await lookupEntered.promise;
+          await vi.advanceTimersByTimeAsync(5_000);
+        }
+        await expect(recovery).resolves.toMatchObject([
+          { id: run.id, status, failureCode },
+        ]);
+        const recovered = await service.getLatest(firstProfile.id);
+        expect(recovered).toMatchObject({ id: run.id, status, failureCode });
+        expect(runtime.stopCalls).toEqual([]);
+        expect(runtime.launchCalls).toHaveLength(1);
+
+        if (status === "running") {
+          expect(await runs.findActiveByProfileId(firstProfile.id)).toEqual(recovered);
+          await expect(service.start(firstProfile.id)).rejects.toMatchObject({
+            code: "ACTIVE_BROWSER_RUN_CONFLICT",
+          });
+          await expect(service.stop(firstProfile.id)).resolves.toMatchObject({
+            accepted: true,
+            run: { id: run.id, status: "stopping" },
+          });
+          await flushRuntimeEvents();
+          await waitForBackgroundTasks(service);
+          expect(runtime.stopCalls).toHaveLength(1);
+          expect(await service.getLatest(firstProfile.id)).toMatchObject({
+            status: "stopped",
+          });
+        } else if (status === "recovery_required") {
+          expect(await runs.findActiveByProfileId(firstProfile.id)).toEqual(recovered);
+          await expect(service.start(firstProfile.id)).rejects.toMatchObject({
+            code: "ACTIVE_BROWSER_RUN_CONFLICT",
+          });
+          await expect(service.stop(firstProfile.id)).rejects.toMatchObject({
+            code: "BROWSER_RUNTIME_RECOVERY_REQUIRED",
+          });
+        } else {
+          expect(recovered?.endedAt).not.toBeNull();
+          expect(await runs.findActiveByProfileId(firstProfile.id)).toBeNull();
+          await expect(service.stop(firstProfile.id)).resolves.toEqual({
+            accepted: false,
+            run: recovered,
+          });
+          const next = await service.start(firstProfile.id);
+          expect(next.id).not.toBe(run.id);
+          await flushRuntimeEvents();
+          await waitForBackgroundTasks(service);
+          expect(await service.getLatest(firstProfile.id)).toMatchObject({
+            id: next.id,
+            status: "running",
+          });
+        }
+        expect(service.pendingEventErrors).toEqual([]);
+      } finally {
+        lookupGate.release();
+        await flushRuntimeEvents();
+        await waitForBackgroundTasks(service);
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  test("rejects an orphaned stop command until its process is verified", async () => {
+    const runtime = new FakeBrowserRuntime();
+    const { service, runs, run } = await createInterruptedStop(runtime);
+    await expect(service.stop(firstProfile.id)).rejects.toMatchObject({
+      code: "BROWSER_RUNTIME_RECOVERY_REQUIRED",
+      failureCode: "RUNTIME_STOP_INTERRUPTED",
+    });
+    expect(await runs.findById(run.id)).toMatchObject({
+      status: "recovery_required",
+      failureCode: "RUNTIME_STOP_INTERRUPTED",
+    });
+    expect(runtime.stopCalls).toEqual([]);
+    await expect(service.recoverPersistedRuns()).resolves.toMatchObject([
+      { id: run.id, status: "running" },
+    ]);
+    await service.stop(firstProfile.id);
+    await waitForBackgroundTasks(service);
+    expect(runtime.stopCalls).toHaveLength(1);
+    expect(service.pendingEventErrors).toEqual([]);
+  });
+
+  test("keeps an active stop command while recovery is requested", async () => {
+    const runtime = new DeferredStopRuntime();
+    const { service } = createService(runtime);
+    try {
+      await service.start(firstProfile.id);
+      await waitForBackgroundTasks(service);
+      const command = await service.stop(firstProfile.id);
+      await runtime.waitUntilStopStarts();
+      await expect(service.recoverPersistedRuns()).resolves.toEqual([command.run]);
+      await expect(service.stop(firstProfile.id)).resolves.toEqual(command);
+      expect(runtime.stopInvocations).toBe(1);
+      expect(runtime.inner.recoveryCalls).toEqual([]);
+    } finally {
+      runtime.releaseStop();
+      await waitForBackgroundTasks(service);
+    }
+  });
+
+  test("does not inspect processes when persisting an interrupted stop fails", async () => {
+    const runtime = new FakeBrowserRuntime();
+    const { service, runs, run } = await createInterruptedStop(runtime);
+    const persistenceError = new Error(
+      "Simulated interrupted-stop persistence failure",
+    );
+    runs.failNextSave = persistenceError;
+    await expect(service.recoverPersistedRuns()).rejects.toBe(persistenceError);
+    expect(await runs.findById(run.id)).toEqual(run);
+    expect(runtime.recoveryCalls).toEqual([]);
+    expect(runtime.stopCalls).toEqual([]);
+    await expect(service.recoverPersistedRuns()).resolves.toMatchObject([
+      { status: "running" },
+    ]);
+  });
+
+  test.each(confirmedExitCases)(
+    "discards stale cleanup context after reattachment and a $exit.kind exit",
+    async ({ exit, status, failureCode }) => {
+      const runtime = new FakeBrowserRuntime({
+        launchPlans: [{ outcome: "fail-after-spawn", failureCode: "METADATA_UNKNOWN" }],
+        stopPlans: [{ outcome: "fail" }],
+      });
+      const { service } = createService(runtime);
+      await service.start(firstProfile.id);
+      await waitForBackgroundTasks(service);
+      const process = runtime.activeProcesses()[0];
+      expect(process).toBeDefined();
+      await expect(service.recoverPersistedRuns()).resolves.toMatchObject([
+        { status: "running", failureCode: null },
+      ]);
+      emitConfirmedExit(runtime, process!, exit);
+      await flushRuntimeEvents();
+      await waitForBackgroundTasks(service);
+      expect(await service.getLatest(firstProfile.id)).toMatchObject({
+        status,
+        failureCode,
+      });
+      expect(service.pendingEventErrors).toEqual([]);
+    },
+  );
+
+  test.each(["unknown", "identity-mismatch", "save-failure"] as const)(
+    "retains cleanup context when reattachment ends with $0",
+    async (outcome) => {
+      const runtime = new FakeBrowserRuntime({
+        launchPlans: [{ outcome: "fail-after-spawn", failureCode: "METADATA_UNKNOWN" }],
+        stopPlans: [{ outcome: "fail" }],
+      });
+      const { service, runs } = createService(runtime);
+      await service.start(firstProfile.id);
+      await waitForBackgroundTasks(service);
+      const process = runtime.activeProcesses()[0];
+      expect(process).toBeDefined();
+      if (outcome === "unknown") {
+        vi.spyOn(runtime, "recover").mockResolvedValue({
+          status: "unknown",
+          failureCode: "UNVERIFIED",
+        });
+      } else if (outcome === "identity-mismatch") {
+        vi.spyOn(runtime, "recover").mockResolvedValue({
+          status: "attached",
+          process: { ...process!, processIdentity: "foreign-process" },
+        });
+      }
+      if (outcome === "save-failure") {
+        const persistenceError = new Error(
+          "Simulated recovered-state persistence failure",
+        );
+        runs.failNextSave = persistenceError;
+        await expect(service.recoverPersistedRuns()).rejects.toBe(persistenceError);
+      } else {
+        await expect(service.recoverPersistedRuns()).resolves.toMatchObject([
+          { status: "recovery_required" },
+        ]);
+      }
+      runtime.emitNormalExit(process!);
+      await flushRuntimeEvents();
+      await waitForBackgroundTasks(service);
+      expect(await service.getLatest(firstProfile.id)).toMatchObject({
+        status: "failed",
+        failureCode: "METADATA_UNKNOWN",
+      });
+      expect(service.pendingEventErrors).toEqual([]);
+    },
+  );
+
+  test("renews an exit subscription after a previous registration was lost", async () => {
+    const processHost = new FakeBrowserProcessHost();
+    const runtime = new FakeBrowserRuntime({ processHost });
+    const { service } = createService(runtime);
+    await service.start(firstProfile.id);
+    await waitForBackgroundTasks(service);
+    const process = runtime.activeProcesses()[0];
+    expect(process).toBeDefined();
+    processHost.simulateApiProcessExit();
+    await service.recoverPersistedRuns();
+    runtime.emitNormalExit(process!);
+    await flushRuntimeEvents();
+    await waitForBackgroundTasks(service);
+    expect(await service.getLatest(firstProfile.id)).toMatchObject({
+      status: "stopped",
+    });
+    expect(service.pendingEventErrors).toEqual([]);
+  });
+
+  test("releases cleanup context and its subscription after confirmed absence", async () => {
+    const processHost = new FakeBrowserProcessHost();
+    const runtime = new FakeBrowserRuntime({
+      processHost,
+      launchPlans: [{ outcome: "fail-after-spawn", failureCode: "METADATA_UNKNOWN" }],
+      stopPlans: [{ outcome: "fail" }],
+      recoveryPlans: [{ outcome: "absent" }],
+    });
+    const unsubscribed = vi.fn();
+    const originalLaunch = runtime.launch.bind(runtime);
+    vi.spyOn(runtime, "launch").mockImplementationOnce(async (input) => {
+      const launch = await originalLaunch(input);
+      if (launch.status !== "failed_before_spawn" && launch.process !== null) {
+        const subscribe = launch.process.onExit.bind(launch.process);
+        vi.spyOn(launch.process, "onExit").mockImplementation((listener) => {
+          const unsubscribe = subscribe(listener);
+          return () => {
+            unsubscribed();
+            unsubscribe();
+          };
+        });
+      }
+      return launch;
+    });
+    const { service, runs } = createService(runtime);
+    await service.start(firstProfile.id);
+    await waitForBackgroundTasks(service);
+    const process = runtime.activeProcesses()[0];
+    expect(process).toBeDefined();
+    processHost.simulateApiProcessExit();
+    runtime.emitNormalExit(process!);
+    await expect(service.recoverPersistedRuns()).resolves.toMatchObject([
+      { status: "failed", failureCode: "METADATA_UNKNOWN" },
+    ]);
+    expect(unsubscribed).toHaveBeenCalledTimes(1);
+    expect(await runs.findActiveByProfileId(firstProfile.id)).toBeNull();
+    expect(service.pendingEventErrors).toEqual([]);
   });
 
   test("keeps a persisted starting run occupied when stop is rejected", async () => {

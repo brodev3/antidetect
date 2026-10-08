@@ -9,7 +9,12 @@ export interface RuntimeLaunchInput {
   readonly identityRef: string | null;
 }
 
+/**
+ * Confirms that all run-owned processes and pending launchers have ended.
+ * Unknown kind means an unknown exit cause, not an unknown process state.
+ */
 export interface RuntimeExit {
+  readonly kind: "normal" | "abnormal" | "unknown";
   readonly code: number | null;
   readonly signal: string | null;
 }
@@ -51,6 +56,7 @@ export interface RuntimeStopOptions {
   readonly timeoutMs: number;
 }
 
+/** Exit classification must agree with the corresponding onExit notification. */
 export interface RuntimeStopSuccess {
   readonly status: "stopped";
   readonly exit: RuntimeExit;
@@ -75,6 +81,10 @@ export interface RuntimeRecoveryInput {
   /** Persisted before launch so recovery can find a process without PID metadata. */
   readonly runId: string;
   readonly profileId: string;
+  /** Persisted run timestamp; recovery rejects a process created before this run. */
+  readonly runCreatedAt: string;
+  /** Same deterministic user-data directory supplied to launch for this profile. */
+  readonly profileDirectory: string;
   readonly processPid: number | null;
   readonly processIdentity: string | null;
 }
@@ -84,6 +94,7 @@ export interface RuntimeRecoveryAttached {
   readonly process: RuntimeProcess;
 }
 
+/** A confirmed owned-tree exit, classified by the same rules as onExit/stop. */
 export interface RuntimeRecoveryExited {
   readonly status: "exited";
   readonly exit: RuntimeExit;

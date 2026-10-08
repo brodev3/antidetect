@@ -1,6 +1,12 @@
 export class ProfileOperationMutex {
   private readonly tails = new Map<string, Promise<void>>();
 
+  async waitForIdle(): Promise<void> {
+    while (this.tails.size > 0) {
+      await Promise.all(this.tails.values());
+    }
+  }
+
   async runExclusive<T>(profileId: string, operation: () => Promise<T>): Promise<T> {
     if (profileId.trim().length === 0) {
       throw new TypeError("profileId must not be empty");

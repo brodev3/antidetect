@@ -174,6 +174,62 @@ async function establishSession(
   return { ...requestHeaders, cookie: sessionCookie };
 }
 
+test.each([
+  { method: "emitNormalExit", status: "stopped" },
+  { method: "emitUnexpectedExit", status: "failed" },
+  { method: "emitUnknownExit", status: "failed" },
+] as const)(
+  "reads $status after $method without exposing exit diagnostics",
+  async ({ method, status }) => {
+    const runtime = new FakeBrowserRuntime();
+    const { app, lifecycle } = await openRuntimeApp(runtime);
+    const headers = await establishSession(app);
+    try {
+      const startResponse = await app
+        .getHttpAdapter()
+        .getInstance()
+        .inject({
+          method: "POST",
+          url: `/profiles/${profileId}/start`,
+          headers,
+        });
+      expect(startResponse.statusCode).toBe(202);
+      await vi.waitFor(async () => {
+        expect((await lifecycle.getLatest(profileId))?.status).toBe("running");
+        expect(runtime.activeProcesses()).toHaveLength(1);
+      });
+      const process = runtime.activeProcesses()[0];
+      expect(process).toBeDefined();
+      runtime[method](process!, { code: 0, signal: "EXIT_SIGNAL_SENTINEL" });
+
+      await vi.waitFor(async () => {
+        const response = await app
+          .getHttpAdapter()
+          .getInstance()
+          .inject({
+            method: "GET",
+            url: `/profiles/${profileId}/run`,
+            headers,
+          });
+        expect(response.statusCode).toBe(200);
+        const body = browserRunStateResponseSchema.parse(response.json());
+        expect(body.run?.status).toBe(status);
+        expect(Object.keys(body.run ?? {}).sort()).toEqual([
+          "createdAt",
+          "endedAt",
+          "id",
+          "profileId",
+          "status",
+          "updatedAt",
+        ]);
+        expect(response.body).not.toContain("EXIT_SIGNAL_SENTINEL");
+      });
+    } finally {
+      await app.close();
+    }
+  },
+);
+
 test("starts, reads, stops, and repeats stop through the lifecycle API", async () => {
   const { app } = await openRuntimeApp();
   const headers = await establishSession(app);
