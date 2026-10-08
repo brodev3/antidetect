@@ -5,6 +5,8 @@ import { ZodSerializerInterceptor, ZodValidationPipe } from "nestjs-zod";
 import type { ProfileRepository } from "./application/profiles/profile.repository.js";
 import type { BrowserLifecycleService } from "./application/browserRuns/browser.lifecycle.service.js";
 import { BrowserRunsModule } from "./browser.runs.module.js";
+import { EngineStatusReader } from "./application/runtime/engine.status.reader.js";
+import { EngineStatusController } from "./engine.status.controller.js";
 import { HealthModule } from "./health.module.js";
 import { ApiErrorFilter } from "./infrastructure/http/api.error.filter.js";
 import { LocalSessionController } from "./infrastructure/http/local.session.controller.js";
@@ -17,6 +19,7 @@ export class AppModule {
     profileRepository: ProfileRepository,
     localSession: LocalSessionStore,
     browserLifecycleService?: BrowserLifecycleService,
+    engineStatusReader?: EngineStatusReader,
   ): DynamicModule {
     return {
       module: AppModule,
@@ -27,9 +30,19 @@ export class AppModule {
           ? []
           : [BrowserRunsModule.register(browserLifecycleService)]),
       ],
-      controllers: [LocalSessionController],
+      controllers: [LocalSessionController, EngineStatusController],
       providers: [
         { provide: LocalSessionStore, useValue: localSession },
+        {
+          provide: EngineStatusReader,
+          useValue: engineStatusReader ?? {
+            read: async () => ({
+              engine: "shardx",
+              status: "unavailable",
+              version: null,
+            }),
+          },
+        },
         {
           provide: APP_PIPE,
           useClass: ZodValidationPipe,

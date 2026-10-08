@@ -1,4 +1,5 @@
 import * as React from "react";
+import { EngineStatusCard } from "./engine.status";
 import {
   PROFILE_DISPLAY_NAME_MAX_LENGTH,
   type BrowserRunResponse,
@@ -1403,6 +1404,7 @@ export function App() {
             Engine
           </a>
         </nav>
+        <EngineStatusCard />
       </aside>
 
       <main className="app-shell">

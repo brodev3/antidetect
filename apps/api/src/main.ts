@@ -13,6 +13,7 @@ import {
 import { runMigrations } from "./infrastructure/sqlite/migrations/migration.runner.js";
 import { acquireRootOwnership } from "./infrastructure/sqlite/root.ownership.js";
 import { SqliteProfileRepository } from "./infrastructure/sqlite/sqlite.profile.repository.js";
+import { ShardXEngineStatusReader } from "./infrastructure/runtime/shardx.engine.status.reader.js";
 
 const { host, port } = readApiServerConfig();
 
@@ -29,6 +30,7 @@ try {
   const app = await buildApp({
     config: { host, port },
     profileRepository: new SqliteProfileRepository(appDatabase),
+    engineStatusReader: new ShardXEngineStatusReader(appPaths.runtimeDir),
   });
   runtime = createApiRuntime(app, rootOwnership);
 

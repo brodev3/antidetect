@@ -12,6 +12,8 @@ import type {
   ProfileRepository,
 } from "./application/profiles/profile.repository.js";
 import { FakeBrowserRuntime } from "./infrastructure/runtime/fake.browser.runtime.js";
+import { ShardXEngineStatusReader } from "./infrastructure/runtime/shardx.engine.status.reader.js";
+import { resolveAppPaths } from "./config/app.paths.js";
 
 const fakeApiConfig = {
   host: "127.0.0.1",
@@ -128,6 +130,11 @@ class FakeBrowserRunRepository implements BrowserRunRepository {
 }
 
 const profiles = new FakeProfileRepository();
+const engineStatusReader =
+  process.platform === "win32" &&
+  (process.env.ANTIDETECT_HOME !== undefined || process.env.LOCALAPPDATA !== undefined)
+    ? new ShardXEngineStatusReader(resolveAppPaths().runtimeDir)
+    : undefined;
 const lifecycle = new BrowserLifecycleService(
   profiles,
   new FakeBrowserRunRepository(),
@@ -139,6 +146,7 @@ const app = await buildApp({
   config: fakeApiConfig,
   profileRepository: profiles,
   browserLifecycleService: lifecycle,
+  ...(engineStatusReader === undefined ? {} : { engineStatusReader }),
 });
 
 await app.listen(fakeApiConfig);

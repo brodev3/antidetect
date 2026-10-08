@@ -77,18 +77,23 @@ body {
 .app-frame {
   display: grid;
   min-height: 100vh;
-  grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-columns: 344px minmax(0, 1fr);
   color: var(--color-ink);
   background: var(--color-background);
 }
 
 .app-sidebar {
+  position: sticky;
+  top: 0;
   display: flex;
+  height: 100vh;
   min-height: 100vh;
+  align-self: start;
   flex-direction: column;
-  padding: 24px 16px;
+  padding: 24px 16px 16px;
   color: var(--color-surface);
   background: var(--color-sidebar);
+  overflow-y: auto;
 }
 
 .brand {
@@ -133,6 +138,7 @@ body {
   display: grid;
   gap: 4px;
   margin-top: 48px;
+  margin-bottom: 32px;
 }
 
 .sidebar-nav__item {
@@ -169,6 +175,156 @@ body {
 .sidebar-nav__count {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.75rem;
+}
+
+.engine-status {
+  --engine-status-color: var(--color-sidebar-muted);
+
+  position: relative;
+  min-width: 0;
+  margin-top: auto;
+  flex-shrink: 0;
+  padding: 12px 14px 14px;
+  border: 1px solid color-mix(in srgb, var(--color-sidebar-border) 80%, transparent);
+  border-radius: var(--radius-panel);
+  background: rgb(255 255 255 / 2%);
+}
+
+.engine-status__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.engine-status__identity {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.engine-status__icon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  margin-top: 3px;
+  flex: 0 0 20px;
+  place-items: center;
+  color: var(--color-primary);
+}
+
+.engine-status__icon svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.engine-status__label {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  gap: 4px;
+}
+
+.engine-status__heading {
+  margin: 0;
+  color: var(--color-sidebar-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+  text-transform: none;
+}
+
+.engine-status__refresh {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  padding: 5px;
+  place-items: center;
+  color: var(--color-sidebar-muted);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    background 160ms ease;
+}
+
+.engine-status__refresh:hover:not(:disabled) {
+  color: var(--color-primary);
+  background: rgb(255 255 255 / 6%);
+}
+
+.engine-status__refresh:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.engine-status__refresh svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.engine-status__name {
+  margin: 0;
+  color: #f7f7f2;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.engine-status__state {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--engine-status-color);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.engine-status__dot {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.engine-status[data-status="checking"],
+.engine-status[data-status="files_detected"] {
+  --engine-status-color: #a2c5df;
+}
+
+.engine-status[data-status="incomplete"] {
+  --engine-status-color: #e6bf69;
+}
+
+.engine-status[data-status="recovery_required"] {
+  --engine-status-color: #e8a36e;
+}
+
+.engine-status__detail {
+  margin: 0;
+  color: var(--color-sidebar-muted);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  text-align: left;
 }
 
 button {
@@ -2147,6 +2303,8 @@ h1 {
   }
 
   .app-sidebar {
+    position: static;
+    height: auto;
     min-height: auto;
     padding: var(--space-4);
   }
@@ -2154,6 +2312,7 @@ h1 {
   .sidebar-nav {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     margin-top: var(--space-5);
+    margin-bottom: 0;
   }
 
   .sidebar-nav__item {
@@ -2163,6 +2322,10 @@ h1 {
 
   .sidebar-nav__count {
     display: none;
+  }
+
+  .sidebar-nav + .engine-status {
+    margin-top: var(--space-4);
   }
 
   .app-shell {

@@ -6,6 +6,12 @@ export {
 } from "./errors.js";
 export { healthResponseSchema, type HealthResponse } from "./health.js";
 export {
+  engineStatusSchema,
+  engineStatusResponseSchema,
+  type EngineStatus,
+  type EngineStatusResponse,
+} from "./engine.js";
+export {
   createProfileRequestSchema,
   listProfilesQuerySchema,
   listProfilesResponseSchema,

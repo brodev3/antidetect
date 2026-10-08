@@ -5,6 +5,7 @@ import { cleanupOpenApiDoc } from "nestjs-zod";
 import { AppModule } from "./app.module.js";
 import type { BrowserLifecycleService } from "./application/browserRuns/browser.lifecycle.service.js";
 import type { ProfileRepository } from "./application/profiles/profile.repository.js";
+import type { EngineStatusReader } from "./application/runtime/engine.status.reader.js";
 import {
   DEFAULT_API_SERVER_CONFIG,
   type ApiServerConfig,
@@ -15,17 +16,24 @@ import { LocalSessionStore } from "./infrastructure/http/local.session.js";
 export interface BuildAppOptions {
   readonly profileRepository: ProfileRepository;
   readonly browserLifecycleService?: BrowserLifecycleService;
+  readonly engineStatusReader?: EngineStatusReader;
   readonly config?: ApiServerConfig;
 }
 
 export async function buildApp({
   profileRepository,
   browserLifecycleService,
+  engineStatusReader,
   config = DEFAULT_API_SERVER_CONFIG,
 }: BuildAppOptions): Promise<NestFastifyApplication> {
   const localSession = new LocalSessionStore();
   const app = await NestFactory.create<NestFastifyApplication>(
-    AppModule.register(profileRepository, localSession, browserLifecycleService),
+    AppModule.register(
+      profileRepository,
+      localSession,
+      browserLifecycleService,
+      engineStatusReader,
+    ),
     new FastifyAdapter({ logger: false }),
     { logger: false },
   );
