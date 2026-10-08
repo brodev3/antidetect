@@ -3,7 +3,10 @@ packages:
   - packages/*
 
 allowBuilds:
+  "@proxyshard/shardx@https://codeload.github.com/brodev3/ShardBrowser/tar.gz/cda916c6e5d93221cb96df3bd9342e8c0232aba8#path:sdks/node": true
   better-sqlite3: true
 
 overrides:
-  fastify: 5.12.1
+  fastify: 5.12.5
+  # Swagger pins js-yaml exactly; apply its security fix within the same major.
+  "@nestjs/swagger@11.4.7>js-yaml": 5.4.1
