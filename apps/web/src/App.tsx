@@ -1,8 +1,11 @@
 import * as React from "react";
 import { EngineStatusCard } from "./engine.status";
 import {
+  DEFAULT_FINGERPRINT_PLATFORM,
+  FINGERPRINT_PLATFORMS,
   PROFILE_DISPLAY_NAME_MAX_LENGTH,
   type BrowserRunResponse,
+  type FingerprintPlatform,
   type ProfileResponse,
 } from "@antidetect/contracts";
 import {
@@ -16,7 +19,9 @@ import {
   fetchProfiles,
   ProfileApiError,
   updateProfileFingerprintMode,
+  updateProfileFingerprintPlatform,
 } from "./api/profiles";
+import { getCreateProfileErrorMessage } from "./profile.errors";
 
 type ProfileLifecycleStatus =
   "running" | "stopped" | "starting" | "stopping" | "failed";
@@ -99,6 +104,7 @@ type DemoProfile = {
   name: string;
   tags: ProfileTagId[];
   fingerprintEnabled?: boolean;
+  fingerprintPlatform?: FingerprintPlatform;
   status: ProfileLifecycleStatus;
   statusElapsedSeconds?: number;
   readiness: ProfileReadiness;
@@ -280,8 +286,11 @@ function mapApiProfile(profile: ProfileResponse): DemoProfile {
     readiness: "unknown",
     lastRunAt: null,
     fingerprintEnabled: profile.fingerprintEnabled,
+    fingerprintPlatform: profile.fingerprintPlatform,
     identity: {
-      platform: profile.fingerprintEnabled ? "Pending" : "No fingerprint",
+      platform: profile.fingerprintEnabled
+        ? profile.fingerprintPlatform
+        : "No fingerprint",
     },
     network: {
       address: null,
@@ -794,6 +803,8 @@ export function App() {
   const [isCreateProfileOpen, setIsCreateProfileOpen] = React.useState(false);
   const [createProfileName, setCreateProfileName] = React.useState("");
   const [createFingerprintEnabled, setCreateFingerprintEnabled] = React.useState(true);
+  const [createFingerprintPlatform, setCreateFingerprintPlatform] =
+    React.useState<FingerprintPlatform>(DEFAULT_FINGERPRINT_PLATFORM);
   const [createProfileError, setCreateProfileError] = React.useState<string | null>(
     null,
   );
@@ -848,6 +859,7 @@ export function App() {
     setSelectedProxyProfile(null);
     setCreateProfileName("");
     setCreateFingerprintEnabled(true);
+    setCreateFingerprintPlatform(DEFAULT_FINGERPRINT_PLATFORM);
     setCreateProfileError(null);
     setIsCreateProfileOpen(true);
   }
@@ -889,17 +901,15 @@ export function App() {
       await createProfile({
         displayName,
         fingerprintEnabled: createFingerprintEnabled,
+        fingerprintPlatform: createFingerprintPlatform,
       });
       setCreateProfileName("");
       setCreateFingerprintEnabled(true);
+      setCreateFingerprintPlatform(DEFAULT_FINGERPRINT_PLATFORM);
       setIsCreateProfileOpen(false);
       setProfileReloadAttempt((current) => current + 1);
     } catch (error: unknown) {
-      setCreateProfileError(
-        error instanceof Error && error.message.length > 0
-          ? error.message
-          : "Unable to create profile",
-      );
+      setCreateProfileError(getCreateProfileErrorMessage(error));
     } finally {
       setIsSubmittingProfile(false);
     }
@@ -1093,10 +1103,75 @@ export function App() {
               ? {
                   ...currentProfile,
                   fingerprintEnabled: updatedProfile.fingerprintEnabled,
+                  fingerprintPlatform: updatedProfile.fingerprintPlatform,
                   identity: {
                     ...currentProfile.identity,
                     platform: updatedProfile.fingerprintEnabled
-                      ? "Pending"
+                      ? updatedProfile.fingerprintPlatform
+                      : "No fingerprint",
+                  },
+                }
+              : currentProfile,
+          ),
+        };
+      });
+    } catch (error: unknown) {
+      setFingerprintOperationErrors((current) => ({
+        ...current,
+        [profile.id]: getFingerprintModeErrorMessage(error),
+      }));
+    } finally {
+      fingerprintActionsInFlightRef.current.delete(profile.id);
+      setPendingFingerprintChanges((current) => {
+        if (current[profile.id] === undefined) {
+          return current;
+        }
+
+        const next = { ...current };
+        delete next[profile.id];
+        return next;
+      });
+    }
+  }
+
+  async function handleFingerprintPlatformChange(
+    profile: DemoProfile,
+    fingerprintPlatform: FingerprintPlatform,
+  ): Promise<void> {
+    if (
+      !fakeRuntimeMode ||
+      fingerprintActionsInFlightRef.current.has(profile.id) ||
+      fingerprintPlatform === profile.fingerprintPlatform
+    ) {
+      return;
+    }
+
+    fingerprintActionsInFlightRef.current.add(profile.id);
+    setPendingFingerprintChanges((current) => ({ ...current, [profile.id]: true }));
+    clearFingerprintOperationError(profile.id);
+
+    try {
+      const updatedProfile = await updateProfileFingerprintPlatform(
+        profile.id,
+        fingerprintPlatform,
+      );
+      setProfileLoadState((current) => {
+        if (current.status !== "ready") {
+          return current;
+        }
+
+        return {
+          ...current,
+          profiles: current.profiles.map((currentProfile) =>
+            currentProfile.id === updatedProfile.id
+              ? {
+                  ...currentProfile,
+                  fingerprintEnabled: updatedProfile.fingerprintEnabled,
+                  fingerprintPlatform: updatedProfile.fingerprintPlatform,
+                  identity: {
+                    ...currentProfile.identity,
+                    platform: updatedProfile.fingerprintEnabled
+                      ? updatedProfile.fingerprintPlatform
                       : "No fingerprint",
                   },
                 }
@@ -1650,6 +1725,8 @@ export function App() {
                       displayStatus === "stopping" ||
                       displayStatus === "unknown";
                 const fingerprintEnabled = profile.fingerprintEnabled !== false;
+                const selectedFingerprintPlatform =
+                  profile.fingerprintPlatform ?? DEFAULT_FINGERPRINT_PLATFORM;
                 const fingerprintChangePending =
                   pendingFingerprintChanges[profile.id] === true;
                 const fingerprintOperationError =
@@ -1842,6 +1919,33 @@ export function App() {
                           )}
                           {fakeRuntimeMode ? (
                             <>
+                              <label className="profile-fingerprint-platform">
+                                <span>Platform</span>
+                                <select
+                                  aria-describedby={
+                                    fingerprintOperationError === null
+                                      ? undefined
+                                      : fingerprintErrorId
+                                  }
+                                  aria-label={
+                                    "Fingerprint platform for " + profile.name
+                                  }
+                                  disabled={fingerprintChangePending}
+                                  onChange={(event) =>
+                                    void handleFingerprintPlatformChange(
+                                      profile,
+                                      event.currentTarget.value as FingerprintPlatform,
+                                    )
+                                  }
+                                  value={selectedFingerprintPlatform}
+                                >
+                                  {FINGERPRINT_PLATFORMS.map((platform) => (
+                                    <option key={platform} value={platform}>
+                                      {platform}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
                               <button
                                 aria-busy={fingerprintChangePending}
                                 aria-checked={fingerprintEnabled}
@@ -2104,6 +2208,35 @@ export function App() {
                     value={createProfileName}
                   />
                 </label>
+                <div className="create-profile-form__field">
+                  <label htmlFor="create-profile-fingerprint-platform">
+                    Fingerprint platform
+                  </label>
+                  <select
+                    aria-describedby="create-profile-fingerprint-platform-hint"
+                    disabled={isSubmittingProfile}
+                    id="create-profile-fingerprint-platform"
+                    onChange={(event) =>
+                      setCreateFingerprintPlatform(
+                        event.target.value as FingerprintPlatform,
+                      )
+                    }
+                    value={createFingerprintPlatform}
+                  >
+                    {FINGERPRINT_PLATFORMS.map((platform) => (
+                      <option key={platform} value={platform}>
+                        {platform}
+                      </option>
+                    ))}
+                  </select>
+                  <span
+                    className="create-profile-form__hint"
+                    id="create-profile-fingerprint-platform-hint"
+                  >
+                    Target browser platform, not your computer's operating system. Saved
+                    even when fingerprint is off.
+                  </span>
+                </div>
                 <label className="create-profile-form__fingerprint">
                   <input
                     checked={createFingerprintEnabled}

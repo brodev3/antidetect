@@ -5,8 +5,10 @@ import {
   profilePathParamsSchema,
   profileResponseSchema,
   updateProfileFingerprintModeRequestSchema,
+  updateProfileFingerprintPlatformRequestSchema,
   type ApiErrorCode,
   type CreateProfileRequest,
+  type FingerprintPlatform,
   type ProfileResponse,
 } from "@antidetect/contracts";
 
@@ -114,9 +116,11 @@ export async function createProfile(
   const response = await fetch(`${API_BASE_URL}/profiles`, requestInit);
 
   if (!response.ok) {
-    throw new Error(
-      response.status === 400 ? "Profile name is invalid" : "Unable to create profile",
-    );
+    if (response.status === 400) {
+      throw new Error("Profile name is invalid");
+    }
+
+    await throwProfileApiError(response);
   }
 
   let body: unknown;
@@ -162,6 +166,53 @@ export async function updateProfileFingerprintMode(
   }
 
   const response = await fetch(`${profilePath}/fingerprint`, requestInit);
+  if (!response.ok) {
+    await throwProfileApiError(response);
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error("Profile API returned an invalid response");
+  }
+
+  const parsedResponse = profileResponseSchema.safeParse(body);
+  if (!parsedResponse.success) {
+    throw new Error("Profile API returned an invalid response");
+  }
+
+  return parsedResponse.data;
+}
+
+export async function updateProfileFingerprintPlatform(
+  profileId: string,
+  fingerprintPlatform: FingerprintPlatform,
+  signal?: AbortSignal,
+): Promise<ProfileResponse> {
+  const profilePath = getProfilePath(profileId);
+  const parsedRequest = updateProfileFingerprintPlatformRequestSchema.safeParse({
+    fingerprintPlatform,
+  });
+  if (!parsedRequest.success) {
+    throw new Error("Fingerprint platform is invalid");
+  }
+
+  await ensureApiSession(signal);
+  const requestInit: RequestInit = {
+    body: JSON.stringify(parsedRequest.data),
+    credentials: "include",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+    },
+    method: "PATCH",
+  };
+  if (signal !== undefined) {
+    requestInit.signal = signal;
+  }
+
+  const response = await fetch(`${profilePath}/fingerprint/platform`, requestInit);
   if (!response.ok) {
     await throwProfileApiError(response);
   }
