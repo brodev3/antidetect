@@ -19,6 +19,7 @@ import { SqliteProfileRepository } from "../src/infrastructure/sqlite/sqlite.pro
 const profile = {
   id: "f4ace6a0-5049-46af-8b49-797b2216cc2e",
   displayName: "Research profile",
+  fingerprintPlatform: "Windows",
   createdAt: "2026-10-05T10:00:00.000Z",
   updatedAt: "2026-10-05T10:00:00.000Z",
 } as const;

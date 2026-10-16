@@ -2,16 +2,18 @@ import { describe, expect, test } from "vitest";
 import { apiErrorSchema } from "../src/errors.ts";
 
 describe("apiErrorSchema", () => {
-  test.each(["VALIDATION_ERROR", "PROFILE_NOT_FOUND"] as const)(
-    "accepts the %s code",
-    (code) => {
-      expect(
-        apiErrorSchema.parse({
-          error: { code, message: "Safe public message" },
-        }),
-      ).toEqual({ error: { code, message: "Safe public message" } });
-    },
-  );
+  test.each([
+    "VALIDATION_ERROR",
+    "PROFILE_NOT_FOUND",
+    "FINGERPRINT_RUNTIME_NOT_READY",
+    "FINGERPRINT_GENERATION_FAILED",
+  ] as const)("accepts the %s code", (code) => {
+    expect(
+      apiErrorSchema.parse({
+        error: { code, message: "Safe public message" },
+      }),
+    ).toEqual({ error: { code, message: "Safe public message" } });
+  });
 
   test.each([
     { error: { code: "INTERNAL_ERROR", message: "Unsupported code" } },

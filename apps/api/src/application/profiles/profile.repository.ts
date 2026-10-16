@@ -1,9 +1,11 @@
 import type { FingerprintIdentity } from "../fingerprints/fingerprint.identity.repository.js";
+import type { FingerprintPlatform } from "../fingerprints/fingerprint.generator.js";
 
 export interface Profile {
   readonly id: string;
   readonly profileCode: string;
   readonly displayName: string;
+  readonly fingerprintPlatform: FingerprintPlatform;
   readonly fingerprintEnabled: boolean;
   readonly identityRef: string | null;
   readonly createdAt: string;
@@ -13,6 +15,7 @@ export interface Profile {
 export interface ProfileDraft {
   readonly id: string;
   readonly displayName: string;
+  readonly fingerprintPlatform?: FingerprintPlatform;
   readonly fingerprintEnabled: boolean;
   readonly identityRef: string | null;
   readonly createdAt: string;
@@ -23,6 +26,7 @@ export interface ProfileFingerprintSettings {
   readonly fingerprintEnabled: boolean;
   readonly identityRef: string | null;
   readonly updatedAt: string;
+  readonly fingerprintPlatform?: FingerprintPlatform;
 }
 
 export interface ProfileListOptions {
@@ -42,6 +46,17 @@ export interface ProfileRepository {
   updateFingerprintSettings(
     id: string,
     settings: ProfileFingerprintSettings,
+  ): Promise<Profile | null>;
+  enableFingerprintWithIdentity(
+    id: string,
+    identity: FingerprintIdentity,
+    updatedAt: string,
+  ): Promise<Profile | null>;
+  replaceFingerprintIdentity(
+    id: string,
+    identity: FingerprintIdentity,
+    updatedAt: string,
+    fingerprintPlatform?: FingerprintPlatform,
   ): Promise<Profile | null>;
   list(options: ProfileListOptions): Promise<readonly Profile[]>;
 }

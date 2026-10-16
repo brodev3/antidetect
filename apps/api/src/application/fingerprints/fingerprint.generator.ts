@@ -1,6 +1,17 @@
+import type { FingerprintPlatform } from "@antidetect/contracts";
+
+export {
+  DEFAULT_FINGERPRINT_PLATFORM,
+  FINGERPRINT_PLATFORMS,
+} from "@antidetect/contracts";
+export type { FingerprintPlatform } from "@antidetect/contracts";
+
 export interface FingerprintGenerator {
   // The caller owns identity metadata and persistence, not the SDK.
-  generate(identityId: string): Promise<Readonly<Record<string, unknown>>>;
+  generate(
+    identityId: string,
+    platform?: FingerprintPlatform,
+  ): Promise<Readonly<Record<string, unknown>>>;
 }
 
 export type FingerprintGenerationErrorCode =

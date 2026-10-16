@@ -8,6 +8,10 @@ export const PROFILE_LIST_DEFAULT_SORT_BY = "createdAt" as const;
 export const PROFILE_LIST_DEFAULT_SORT_ORDER = "asc" as const;
 export const PROFILE_LIST_SORT_BY_VALUES = ["createdAt", "displayName"] as const;
 export const PROFILE_LIST_SORT_ORDER_VALUES = ["asc", "desc"] as const;
+export const FINGERPRINT_PLATFORMS = ["Windows", "macOS", "Linux"] as const;
+export const DEFAULT_FINGERPRINT_PLATFORM = "Windows" as const;
+export const fingerprintPlatformSchema = z.enum(FINGERPRINT_PLATFORMS);
+export type FingerprintPlatform = z.infer<typeof fingerprintPlatformSchema>;
 
 export const profileIdSchema = z.uuid();
 export const profileCodeSchema = z
@@ -20,6 +24,7 @@ export const profileResponseSchema = z
     id: profileIdSchema,
     profileCode: profileCodeSchema,
     displayName: z.string().min(1).max(PROFILE_DISPLAY_NAME_MAX_LENGTH),
+    fingerprintPlatform: fingerprintPlatformSchema,
     fingerprintEnabled: z.boolean(),
     identityRef: z.string().min(1).max(200).nullable(),
     createdAt: z.iso.datetime({ offset: true }),
@@ -37,10 +42,15 @@ export const profileResponseSchema = z
 export const createProfileRequestSchema = z.strictObject({
   displayName: z.string().trim().min(1).max(PROFILE_DISPLAY_NAME_MAX_LENGTH),
   fingerprintEnabled: z.boolean().default(true),
+  fingerprintPlatform: fingerprintPlatformSchema.default(DEFAULT_FINGERPRINT_PLATFORM),
 });
 
 export const updateProfileFingerprintModeRequestSchema = z.strictObject({
   fingerprintEnabled: z.boolean(),
+});
+
+export const updateProfileFingerprintPlatformRequestSchema = z.strictObject({
+  fingerprintPlatform: fingerprintPlatformSchema,
 });
 
 export const profilePathParamsSchema = z.strictObject({
@@ -85,6 +95,9 @@ export type ProfileResponse = z.infer<typeof profileResponseSchema>;
 export type CreateProfileRequest = z.input<typeof createProfileRequestSchema>;
 export type UpdateProfileFingerprintModeRequest = z.infer<
   typeof updateProfileFingerprintModeRequestSchema
+>;
+export type UpdateProfileFingerprintPlatformRequest = z.infer<
+  typeof updateProfileFingerprintPlatformRequestSchema
 >;
 export type ProfilePathParams = z.infer<typeof profilePathParamsSchema>;
 export type ListProfilesQuery = z.infer<typeof listProfilesQuerySchema>;

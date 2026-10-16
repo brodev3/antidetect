@@ -1,5 +1,6 @@
 import { Kysely, SqliteDialect, sql } from "kysely";
 import type { RootOwnership } from "./root.ownership.js";
+import type { FingerprintPlatform } from "../../application/fingerprints/fingerprint.generator.js";
 
 export interface SchemaMigrationsTable {
   version: number;
@@ -11,6 +12,7 @@ export interface ProfilesTable {
   id: string;
   profile_code: string;
   display_name: string;
+  fingerprint_platform: FingerprintPlatform;
   fingerprint_enabled: number;
   identity_ref: string | null;
   created_at: string;

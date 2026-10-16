@@ -8,12 +8,14 @@ import {
   profilePathParamsSchema,
   profileResponseSchema,
   updateProfileFingerprintModeRequestSchema,
+  updateProfileFingerprintPlatformRequestSchema,
 } from "../src/profiles.ts";
 
 const profile = {
   id: "550e8400-e29b-41d4-a716-446655440000",
   profileCode: "profile-001",
   displayName: "Research profile",
+  fingerprintPlatform: "Windows",
   fingerprintEnabled: true,
   identityRef: "test-identity:550e8400-e29b-41d4-a716-446655440000",
   createdAt: "2026-09-20T10:00:00.000Z",
@@ -27,6 +29,7 @@ describe("createProfileRequestSchema", () => {
     ).toEqual({
       displayName: "Research profile",
       fingerprintEnabled: true,
+      fingerprintPlatform: "Windows",
     });
   });
 
@@ -36,7 +39,32 @@ describe("createProfileRequestSchema", () => {
         displayName: "Research profile",
         fingerprintEnabled: false,
       }),
-    ).toEqual({ displayName: "Research profile", fingerprintEnabled: false });
+    ).toEqual({
+      displayName: "Research profile",
+      fingerprintEnabled: false,
+      fingerprintPlatform: "Windows",
+    });
+  });
+
+  test.each(["Windows", "macOS", "Linux"] as const)(
+    "accepts target platform %s",
+    (fingerprintPlatform) => {
+      expect(
+        createProfileRequestSchema.parse({
+          displayName: "Research profile",
+          fingerprintPlatform,
+        }).fingerprintPlatform,
+      ).toBe(fingerprintPlatform);
+    },
+  );
+
+  test("rejects an unsupported target platform", () => {
+    expect(
+      createProfileRequestSchema.safeParse({
+        displayName: "Research profile",
+        fingerprintPlatform: "Android",
+      }).success,
+    ).toBe(false);
   });
 
   test.each([
@@ -70,6 +98,29 @@ describe("updateProfileFingerprintModeRequestSchema", () => {
   });
 });
 
+describe("updateProfileFingerprintPlatformRequestSchema", () => {
+  test.each(["Windows", "macOS", "Linux"] as const)(
+    "accepts target platform %s",
+    (fingerprintPlatform) => {
+      expect(
+        updateProfileFingerprintPlatformRequestSchema.parse({
+          fingerprintPlatform,
+        }),
+      ).toEqual({ fingerprintPlatform });
+    },
+  );
+
+  test.each([
+    {},
+    { fingerprintPlatform: "Android" },
+    { fingerprintPlatform: "Linux", identityRef: "client-value" },
+  ])("rejects invalid platform update request", (value) => {
+    expect(updateProfileFingerprintPlatformRequestSchema.safeParse(value).success).toBe(
+      false,
+    );
+  });
+});
+
 describe("profile response contracts", () => {
   test("accepts a strict profile response", () => {
     expect(profileResponseSchema.parse(profile)).toEqual(profile);
@@ -93,6 +144,7 @@ describe("profile response contracts", () => {
   test.each([
     { ...profile, id: "not-a-uuid" },
     { ...profile, createdAt: "20 September 2026" },
+    { ...profile, fingerprintPlatform: "Android" },
     { ...profile, identityRef: "" },
     { ...profile, identityRef: null },
     { ...profile, internalState: "must not cross the boundary" },

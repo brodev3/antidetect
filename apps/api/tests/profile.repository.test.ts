@@ -3,18 +3,26 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "kysely";
 import { expect, test } from "vitest";
+import {
+  FINGERPRINT_FORMAT_VERSION,
+  type FingerprintIdentity,
+} from "../src/application/fingerprints/fingerprint.identity.repository.ts";
 import { resolveAppPaths } from "../src/config/app.paths.ts";
 import { ensureAppRootDirectories } from "../src/infrastructure/filesystem/app.directories.ts";
 import { createAppDatabase } from "../src/infrastructure/sqlite/app.database.ts";
 import { createProfilesMigration } from "../src/infrastructure/sqlite/migrations/001-create-profiles.ts";
+import { createBrowserRunsMigration } from "../src/infrastructure/sqlite/migrations/002-create-browser-runs.ts";
+import { addProfileCodesMigration } from "../src/infrastructure/sqlite/migrations/003-add-profile-codes.ts";
 import { runMigrations } from "../src/infrastructure/sqlite/migrations/migration.runner.ts";
 import { SqliteProfileRepository } from "../src/infrastructure/sqlite/sqlite.profile.repository.ts";
+import { SqliteFingerprintIdentityRepository } from "../src/infrastructure/sqlite/sqlite.fingerprint.identity.repository.ts";
 import { acquireRootOwnership } from "../src/infrastructure/sqlite/root.ownership.ts";
 
 const profile = {
   id: "profile-001",
   profileCode: "profile-001",
   displayName: "Research profile",
+  fingerprintPlatform: "Windows",
   fingerprintEnabled: true,
   identityRef: "identity-001",
   createdAt: "2026-09-15T10:00:00.000Z",
@@ -106,6 +114,73 @@ test("runs profiles migration idempotently and persists repository data", async 
   }
 });
 
+test("adds a default platform to existing profiles and constrains new values", async () => {
+  const tempRoot = await fs.mkdtemp(
+    join(tmpdir(), "antidetect-profile-platform-migration-"),
+  );
+  const owner = acquireRootOwnership(join(tempRoot, "antidetect.sqlite"));
+  const database = createAppDatabase(owner);
+
+  try {
+    await sql`
+      CREATE TABLE schema_migrations (
+        version INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at TEXT NOT NULL
+      )
+    `.execute(database);
+
+    const previousMigrations = [
+      createProfilesMigration,
+      createBrowserRunsMigration,
+      addProfileCodesMigration,
+    ] as const;
+    for (const migration of previousMigrations) {
+      await migration.up(database);
+      await database
+        .insertInto("schema_migrations")
+        .values({
+          version: migration.version,
+          name: migration.name,
+          applied_at: "2026-10-17T00:00:00.000Z",
+        })
+        .execute();
+    }
+
+    await sql`
+      INSERT INTO profiles (
+        id, profile_code, display_name, identity_ref, fingerprint_enabled,
+        created_at, updated_at
+      ) VALUES (
+        'legacy-profile', 'profile-001', 'Existing profile', 'legacy-identity',
+        1, '2026-10-16T00:00:00.000Z', '2026-10-16T00:00:00.000Z'
+      )
+    `.execute(database);
+
+    await runMigrations(database);
+
+    await expect(
+      database
+        .selectFrom("profiles")
+        .select(["id", "fingerprint_platform"])
+        .where("id", "=", "legacy-profile")
+        .executeTakeFirst(),
+    ).resolves.toEqual({
+      id: "legacy-profile",
+      fingerprint_platform: "Windows",
+    });
+    await expect(
+      sql`UPDATE profiles SET fingerprint_platform = 'Android' WHERE id = 'legacy-profile'`.execute(
+        database,
+      ),
+    ).rejects.toThrow();
+  } finally {
+    await database.destroy();
+    owner.close();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("rejects a duplicate profile id at the SQLite boundary", async () => {
   const tempRoot = await fs.mkdtemp(join(tmpdir(), "antidetect-profile-duplicate-"));
   const paths = resolveAppPaths({
@@ -128,6 +203,229 @@ test("rejects a duplicate profile id at the SQLite boundary", async () => {
       sql`select count(*) as count from profiles`.execute(database),
     ).resolves.toMatchObject({ rows: [{ count: 1 }] });
   } finally {
+    owner.close();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("atomically saves a newly enabled fingerprint identity and profile setting", async () => {
+  const tempRoot = await fs.mkdtemp(
+    join(tmpdir(), "antidetect-profile-fingerprint-enable-"),
+  );
+  const paths = resolveAppPaths({
+    env: { ANTIDETECT_HOME: join(tempRoot, "app") },
+  });
+  await ensureAppRootDirectories(paths);
+
+  const owner = acquireRootOwnership(paths.databasePath);
+  const database = createAppDatabase(owner);
+  const disabledProfile = {
+    ...profile,
+    fingerprintEnabled: false,
+    identityRef: null,
+  };
+  const identity: FingerprintIdentity = {
+    id: "00000000-0000-4000-8000-000000000001",
+    formatVersion: FINGERPRINT_FORMAT_VERSION,
+    config: { navigator: { platform: "Windows", languages: ["en-US"] } },
+    createdAt: "2026-09-24T10:00:00.000Z",
+  };
+
+  try {
+    await runMigrations(database);
+    const profiles = new SqliteProfileRepository(database);
+    const identities = new SqliteFingerprintIdentityRepository(database);
+    await profiles.create(disabledProfile);
+
+    await expect(
+      profiles.enableFingerprintWithIdentity(
+        disabledProfile.id,
+        identity,
+        "2026-09-24T10:00:00.000Z",
+      ),
+    ).resolves.toEqual({
+      ...disabledProfile,
+      fingerprintEnabled: true,
+      identityRef: identity.id,
+      updatedAt: "2026-09-24T10:00:00.000Z",
+    });
+    await expect(identities.findById(identity.id)).resolves.toEqual(identity);
+
+    const missingIdentity: FingerprintIdentity = {
+      ...identity,
+      id: "00000000-0000-4000-8000-000000000002",
+    };
+    await expect(
+      profiles.enableFingerprintWithIdentity(
+        "missing-profile",
+        missingIdentity,
+        identity.createdAt,
+      ),
+    ).resolves.toBeNull();
+    await expect(identities.findById(missingIdentity.id)).resolves.toBeNull();
+
+    const collisionProfile = {
+      ...disabledProfile,
+      id: "profile-collision",
+      profileCode: "profile-002",
+    };
+    const existingIdentity: FingerprintIdentity = {
+      ...identity,
+      id: "00000000-0000-4000-8000-000000000003",
+    };
+    await profiles.create(collisionProfile);
+    await identities.create(existingIdentity);
+    await expect(
+      profiles.enableFingerprintWithIdentity(
+        collisionProfile.id,
+        existingIdentity,
+        "2026-09-25T10:00:00.000Z",
+      ),
+    ).rejects.toThrow();
+    await expect(profiles.findById(collisionProfile.id)).resolves.toEqual(
+      collisionProfile,
+    );
+    await expect(identities.findById(existingIdentity.id)).resolves.toEqual(
+      existingIdentity,
+    );
+  } finally {
+    await database.destroy();
+    owner.close();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("atomically replaces a fingerprint identity and keeps the old identity immutable", async () => {
+  const tempRoot = await fs.mkdtemp(
+    join(tmpdir(), "antidetect-profile-fingerprint-replace-"),
+  );
+  const paths = resolveAppPaths({
+    env: { ANTIDETECT_HOME: join(tempRoot, "app") },
+  });
+  await ensureAppRootDirectories(paths);
+
+  const owner = acquireRootOwnership(paths.databasePath);
+  const database = createAppDatabase(owner);
+  const previousIdentity: FingerprintIdentity = {
+    id: "00000000-0000-4000-8000-000000000004",
+    formatVersion: FINGERPRINT_FORMAT_VERSION,
+    config: { navigator: { platform: "Windows", languages: ["en-US"] } },
+    createdAt: "2026-09-24T10:00:00.000Z",
+  };
+  const nextIdentity: FingerprintIdentity = {
+    ...previousIdentity,
+    id: "00000000-0000-4000-8000-000000000005",
+    config: { navigator: { platform: "Linux", languages: ["en-GB"] } },
+    createdAt: "2026-09-25T10:00:00.000Z",
+  };
+  const profileWithPreviousIdentity = {
+    ...profile,
+    fingerprintEnabled: false,
+    identityRef: previousIdentity.id,
+  };
+
+  try {
+    await runMigrations(database);
+    const profiles = new SqliteProfileRepository(database);
+    const identities = new SqliteFingerprintIdentityRepository(database);
+    await profiles.create(profileWithPreviousIdentity);
+    await identities.create(previousIdentity);
+
+    await expect(
+      profiles.replaceFingerprintIdentity(
+        profile.id,
+        nextIdentity,
+        nextIdentity.createdAt,
+        "macOS",
+      ),
+    ).resolves.toEqual({
+      ...profileWithPreviousIdentity,
+      fingerprintPlatform: "macOS",
+      identityRef: nextIdentity.id,
+      updatedAt: nextIdentity.createdAt,
+    });
+    await expect(identities.findById(previousIdentity.id)).resolves.toEqual(
+      previousIdentity,
+    );
+    await expect(identities.findById(nextIdentity.id)).resolves.toEqual(nextIdentity);
+
+    await expect(
+      profiles.replaceFingerprintIdentity(
+        profile.id,
+        previousIdentity,
+        "2026-09-26T10:00:00.000Z",
+      ),
+    ).rejects.toThrow();
+    await expect(profiles.findById(profile.id)).resolves.toEqual({
+      ...profileWithPreviousIdentity,
+      fingerprintPlatform: "macOS",
+      identityRef: nextIdentity.id,
+      updatedAt: nextIdentity.createdAt,
+    });
+
+    const missingIdentity: FingerprintIdentity = {
+      ...nextIdentity,
+      id: "00000000-0000-4000-8000-000000000006",
+    };
+    await expect(
+      profiles.replaceFingerprintIdentity(
+        "missing-profile",
+        missingIdentity,
+        nextIdentity.createdAt,
+      ),
+    ).resolves.toBeNull();
+    await expect(identities.findById(missingIdentity.id)).resolves.toBeNull();
+  } finally {
+    await database.destroy();
+    owner.close();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("updates a disabled profile platform without keeping a mismatched identity reference", async () => {
+  const tempRoot = await fs.mkdtemp(
+    join(tmpdir(), "antidetect-profile-platform-disabled-"),
+  );
+  const paths = resolveAppPaths({
+    env: { ANTIDETECT_HOME: join(tempRoot, "app") },
+  });
+  await ensureAppRootDirectories(paths);
+
+  const owner = acquireRootOwnership(paths.databasePath);
+  const database = createAppDatabase(owner);
+  const previousIdentity: FingerprintIdentity = {
+    id: "00000000-0000-4000-8000-000000000007",
+    formatVersion: FINGERPRINT_FORMAT_VERSION,
+    config: { navigator: { platform: "Windows", languages: ["en-US"] } },
+    createdAt: "2026-09-24T10:00:00.000Z",
+  };
+
+  try {
+    await runMigrations(database);
+    const profiles = new SqliteProfileRepository(database);
+    const identities = new SqliteFingerprintIdentityRepository(database);
+    await profiles.create({ ...profile, identityRef: previousIdentity.id });
+    await identities.create(previousIdentity);
+
+    await expect(
+      profiles.updateFingerprintSettings(profile.id, {
+        fingerprintEnabled: false,
+        identityRef: null,
+        fingerprintPlatform: "Linux",
+        updatedAt: "2026-10-17T10:00:00.000Z",
+      }),
+    ).resolves.toEqual({
+      ...profile,
+      fingerprintPlatform: "Linux",
+      fingerprintEnabled: false,
+      identityRef: null,
+      updatedAt: "2026-10-17T10:00:00.000Z",
+    });
+    await expect(identities.findById(previousIdentity.id)).resolves.toEqual(
+      previousIdentity,
+    );
+  } finally {
+    await database.destroy();
     owner.close();
     await fs.rm(tempRoot, { recursive: true, force: true });
   }

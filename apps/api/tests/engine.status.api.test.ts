@@ -1,6 +1,6 @@
 import { engineStatusResponseSchema } from "@antidetect/contracts";
 import { expect, test, vi } from "vitest";
-import { buildApp } from "../src/app.ts";
+import { buildTestApp } from "./support/build.test.app.ts";
 import { createProfileRepositoryStub } from "./support/profile.repository.stub.ts";
 
 const headers = { host: "127.0.0.1:3000" };
@@ -13,7 +13,7 @@ test("engine status is session-protected, fresh, sanitized and documented", asyn
     runtimeDirectory: "C:/private/runtime",
     endpoint: "private-endpoint",
   });
-  const app = await buildApp({
+  const app = await buildTestApp({
     profileRepository: createProfileRepositoryStub(),
     engineStatusReader: { read },
   });
@@ -70,7 +70,7 @@ test("engine status is session-protected, fresh, sanitized and documented", asyn
 });
 
 test("composition without an engine reader reports unavailable, not fake installation", async () => {
-  const app = await buildApp({ profileRepository: createProfileRepositoryStub() });
+  const app = await buildTestApp({ profileRepository: createProfileRepositoryStub() });
   try {
     const http = app.getHttpAdapter().getInstance();
     const session = await http.inject({ method: "GET", url: "/session", headers });

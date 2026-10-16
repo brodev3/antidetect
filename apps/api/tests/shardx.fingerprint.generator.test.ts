@@ -6,6 +6,7 @@ import { Profile, Runtime, ShardX } from "@proxyshard/shardx";
 import { afterEach, expect, test, vi } from "vitest";
 import {
   FingerprintGenerationError,
+  type FingerprintPlatform,
   type FingerprintGenerator,
 } from "../src/application/fingerprints/fingerprint.generator.ts";
 import { InvalidFingerprintIdentityError } from "../src/application/fingerprints/fingerprint.identity.errors.ts";
@@ -39,23 +40,25 @@ function fixture(
   paths: Pick<AppPaths, "runtimeDir" | "profilesDir"> = resolveAppPaths({
     env: { ANTIDETECT_HOME: join(tmpdir(), "antidetect-fingerprint-mock") },
   }),
+  platform: FingerprintPlatform = "Windows",
+  templateId = "windows-template",
 ) {
   const template = {
-    name: "windows-template",
+    name: templateId,
     navigator: {
-      platform: "Windows",
+      platform,
       platform_version: "10.0.0",
       hardware_concurrency: 4,
       device_memory: 8,
       languages: ["en-US"],
     },
-    client_hints: { platform: "Windows", platform_version: "10.0.0" },
+    client_hints: { platform, platform_version: "10.0.0" },
     screen: { width: 1920, height: 1080 },
   };
   const source = {
     randomProfile: vi
       .fn<ShardXFingerprintSource["randomProfile"]>()
-      .mockResolvedValue({ config: template }),
+      .mockResolvedValue({ id: templateId, config: template }),
     createProfile: vi.fn(),
     saveProfile: vi.fn(),
     launch: vi.fn(),
@@ -80,18 +83,18 @@ function fixture(
       }),
   };
   const generator = new ShardXFingerprintGenerator(paths, source, randomizers);
-  return { paths, template, source, randomizers, generator };
+  return { paths, template, source, randomizers, generator, templateId };
 }
 
 test("generates plain Windows config and runs SDK randomizers exactly once in order", async () => {
-  const { template, source, randomizers, generator } = fixture();
+  const { template, source, randomizers, generator, templateId } = fixture();
   const original = structuredClone(template);
   const port: FingerprintGenerator = generator;
   const config = await port.generate(identityId);
 
   expect(source.randomProfile).toHaveBeenCalledExactlyOnceWith({ platform: "Windows" });
   expect(randomizers.hardware).toHaveBeenCalledTimes(1);
-  expect(randomizers.hardware.mock.calls[0]?.[1]).toBe(identityId);
+  expect(randomizers.hardware.mock.calls[0]?.[1]).toBe(templateId);
   expect(randomizers.platformVersion).toHaveBeenCalledTimes(1);
   expect(randomizers.hardware.mock.invocationCallOrder[0]).toBeLessThan(
     randomizers.platformVersion.mock.invocationCallOrder[0]!,
@@ -118,6 +121,54 @@ test("generates plain Windows config and runs SDK randomizers exactly once in or
   ]) {
     expect(forbidden).not.toHaveBeenCalled();
   }
+});
+
+test.each(["Windows", "macOS", "Linux"] as const)(
+  "generates and validates a %s config",
+  async (platform) => {
+    const templateId =
+      platform === "macOS" ? "mac-m1-air13" : `${platform.toLowerCase()}-template`;
+    const { source, randomizers, generator } = fixture(undefined, platform, templateId);
+
+    await expect(generator.generate(identityId, platform)).resolves.toMatchObject({
+      navigator: { platform },
+      client_hints: { platform },
+    });
+    expect(source.randomProfile).toHaveBeenCalledExactlyOnceWith({ platform });
+    expect(randomizers.hardware).toHaveBeenCalledExactlyOnceWith(
+      expect.any(Object),
+      templateId,
+    );
+  },
+);
+
+test("rejects a generated config that does not match the requested platform", async () => {
+  const { randomizers, generator } = fixture();
+
+  await expect(generator.generate(identityId, "macOS")).rejects.toMatchObject({
+    code: "FINGERPRINT_GENERATION_FAILED",
+  });
+  expect(randomizers.hardware).not.toHaveBeenCalled();
+});
+
+test("rejects client hints that do not match the requested platform", async () => {
+  const { template, source, randomizers, generator, templateId } = fixture(
+    undefined,
+    "macOS",
+    "mac-m1-air13",
+  );
+  source.randomProfile.mockResolvedValue({
+    id: templateId,
+    config: {
+      ...template,
+      client_hints: { ...template.client_hints, platform: "Windows" },
+    },
+  });
+
+  await expect(generator.generate(identityId, "macOS")).rejects.toMatchObject({
+    code: "FINGERPRINT_GENERATION_FAILED",
+  });
+  expect(randomizers.hardware).not.toHaveBeenCalled();
 });
 
 test("does not create any files during successful generation with a substituted SDK", async () => {
@@ -157,7 +208,7 @@ test("works with a frozen template and detaches both nested input and SDK workin
 });
 
 test("separate generations do not share mutable config", async () => {
-  const { template, source, randomizers, generator } = fixture();
+  const { template, source, randomizers, generator, templateId } = fixture();
   const first = await generator.generate(identityId);
   (first.navigator as Record<string, unknown>).platform_version = "changed-by-caller";
   const second = await generator.generate(secondIdentityId);
@@ -172,7 +223,7 @@ test("separate generations do not share mutable config", async () => {
   expect(randomizers.hardware).toHaveBeenNthCalledWith(
     2,
     expect.any(Object),
-    secondIdentityId,
+    templateId,
   );
   expect(randomizers.platformVersion).toHaveBeenCalledTimes(2);
 });
@@ -216,6 +267,7 @@ test.each(invalidConfigs)(
   async ({ config }) => {
     const { source, randomizers, generator } = fixture();
     source.randomProfile.mockResolvedValue({
+      id: "windows-template",
       config: config as Record<string, unknown>,
     });
     await expect(generator.generate(identityId)).rejects.toEqual(
@@ -236,7 +288,7 @@ test("cycles and throwing config getters return a fixed error", async () => {
     },
   };
   for (const config of [cycle, throwing]) {
-    source.randomProfile.mockResolvedValue({ config });
+    source.randomProfile.mockResolvedValue({ id: "windows-template", config });
     await expect(generator.generate(identityId)).rejects.toEqual(
       new FingerprintGenerationError("FINGERPRINT_GENERATION_FAILED"),
     );
@@ -345,7 +397,7 @@ test("accepts exactly 1 MiB and rejects oversized UTF-8 source config", async ()
     ...base,
     padding: "a".repeat(MAX_FINGERPRINT_CONFIG_BYTES - overhead),
   };
-  source.randomProfile.mockResolvedValue({ config: exact });
+  source.randomProfile.mockResolvedValue({ id: "windows-template", config: exact });
   const generated = await generator.generate(identityId);
   expect(Buffer.byteLength(JSON.stringify(generated), "utf8")).toBe(
     MAX_FINGERPRINT_CONFIG_BYTES,
@@ -353,7 +405,7 @@ test("accepts exactly 1 MiB and rejects oversized UTF-8 source config", async ()
   expect(randomizers.hardware).toHaveBeenCalledTimes(1);
   const oversized = { ...base, padding: "ж".repeat(MAX_FINGERPRINT_CONFIG_BYTES / 2) };
   expect(JSON.stringify(oversized).length).toBeLessThan(MAX_FINGERPRINT_CONFIG_BYTES);
-  source.randomProfile.mockResolvedValue({ config: oversized });
+  source.randomProfile.mockResolvedValue({ id: "windows-template", config: oversized });
   await expect(generator.generate(secondIdentityId)).rejects.toEqual(
     new FingerprintGenerationError("FINGERPRINT_GENERATION_FAILED"),
   );

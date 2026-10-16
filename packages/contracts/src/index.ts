@@ -13,6 +13,9 @@ export {
 } from "./engine.js";
 export {
   createProfileRequestSchema,
+  DEFAULT_FINGERPRINT_PLATFORM,
+  fingerprintPlatformSchema,
+  FINGERPRINT_PLATFORMS,
   listProfilesQuerySchema,
   listProfilesResponseSchema,
   profileCodeSchema,
@@ -28,12 +31,15 @@ export {
   profilePathParamsSchema,
   profileResponseSchema,
   updateProfileFingerprintModeRequestSchema,
+  updateProfileFingerprintPlatformRequestSchema,
   type CreateProfileRequest,
+  type FingerprintPlatform,
   type ListProfilesQuery,
   type ListProfilesResponse,
   type ProfilePathParams,
   type ProfileResponse,
   type UpdateProfileFingerprintModeRequest,
+  type UpdateProfileFingerprintPlatformRequest,
 } from "./profiles.js";
 export {
   browserRunResponseSchema,

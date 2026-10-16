@@ -5,12 +5,17 @@ import {
   profileResponseSchema,
 } from "@antidetect/contracts";
 import { expect, test, vi } from "vitest";
-import { buildApp } from "../src/app.ts";
+import { buildTestApp } from "./support/build.test.app.ts";
 import type {
   BrowserRun,
   BrowserRunRepository,
 } from "../src/application/browserRuns/browser.run.repository.ts";
 import { BrowserLifecycleService } from "../src/application/browserRuns/browser.lifecycle.service.ts";
+import {
+  FingerprintGenerationError,
+  type FingerprintGenerator,
+} from "../src/application/fingerprints/fingerprint.generator.ts";
+import type { FingerprintIdentity } from "../src/application/fingerprints/fingerprint.identity.repository.ts";
 import type {
   BrowserRuntime,
   RuntimeLaunchInput,
@@ -23,6 +28,7 @@ import type {
 } from "../src/application/runtime/browser.runtime.ts";
 import type {
   Profile,
+  ProfileFingerprintCreationRepository,
   ProfileFingerprintSettings,
   ProfileRepository,
 } from "../src/application/profiles/profile.repository.ts";
@@ -42,6 +48,7 @@ const secondProfile: Profile = {
   id: secondProfileId,
   profileCode: "profile-002",
   displayName: "Other profile",
+  fingerprintPlatform: "Windows",
   fingerprintEnabled: true,
   identityRef: "test-identity:other",
   createdAt: "2026-09-23T01:00:00.000Z",
@@ -49,13 +56,15 @@ const secondProfile: Profile = {
 };
 
 function createRepositories(additionalProfiles: readonly Profile[] = []): {
-  readonly profiles: ProfileRepository;
+  readonly profiles: ProfileRepository & ProfileFingerprintCreationRepository;
   readonly runs: BrowserRunRepository;
+  readonly identities: Map<string, FingerprintIdentity>;
 } {
   const profile: Profile = {
     id: profileId,
     profileCode: "profile-001",
     displayName: "Runtime profile",
+    fingerprintPlatform: "Windows",
     fingerprintEnabled: true,
     identityRef: "test-identity:runtime",
     createdAt: "2026-09-23T01:00:00.000Z",
@@ -66,10 +75,26 @@ function createRepositories(additionalProfiles: readonly Profile[] = []): {
     profileRows.set(additionalProfile.id, additionalProfile);
   }
   const runRows = new Map<string, BrowserRun>();
+  const identityRows = new Map<string, FingerprintIdentity>();
 
-  const profiles: ProfileRepository = {
+  const profiles: ProfileRepository & ProfileFingerprintCreationRepository = {
     async create(value) {
-      const created = { ...value, profileCode: "profile-001" };
+      const created = {
+        ...value,
+        fingerprintPlatform: value.fingerprintPlatform ?? "Windows",
+        profileCode: "profile-001",
+      };
+      profileRows.set(created.id, created);
+      return created;
+    },
+    async createWithFingerprint(value, identity) {
+      const created = {
+        ...value,
+        fingerprintPlatform: value.fingerprintPlatform ?? "Windows",
+        profileCode: "profile-001",
+        fingerprintEnabled: true,
+        identityRef: identity.id,
+      };
       profileRows.set(created.id, created);
       return created;
     },
@@ -80,6 +105,32 @@ function createRepositories(additionalProfiles: readonly Profile[] = []): {
       const current = profileRows.get(id);
       if (current === undefined) return null;
       const updated = { ...current, ...settings };
+      profileRows.set(id, updated);
+      return updated;
+    },
+    async enableFingerprintWithIdentity(id, identity, updatedAt) {
+      const current = profileRows.get(id);
+      if (current === undefined) return null;
+      const updated: Profile = {
+        ...current,
+        fingerprintEnabled: true,
+        identityRef: identity.id,
+        updatedAt,
+      };
+      identityRows.set(identity.id, structuredClone(identity));
+      profileRows.set(id, updated);
+      return updated;
+    },
+    async replaceFingerprintIdentity(id, identity, updatedAt, fingerprintPlatform) {
+      const current = profileRows.get(id);
+      if (current === undefined) return null;
+      const updated: Profile = {
+        ...current,
+        ...(fingerprintPlatform === undefined ? {} : { fingerprintPlatform }),
+        identityRef: identity.id,
+        updatedAt,
+      };
+      identityRows.set(identity.id, structuredClone(identity));
       profileRows.set(id, updated);
       return updated;
     },
@@ -121,7 +172,7 @@ function createRepositories(additionalProfiles: readonly Profile[] = []): {
     },
   };
 
-  return { profiles, runs };
+  return { profiles, runs, identities: identityRows };
 }
 
 function createRecoveryRun(processPid: number, processIdentity: string): BrowserRun {
@@ -141,6 +192,11 @@ function createRecoveryRun(processPid: number, processIdentity: string): Browser
 async function openRuntimeApp(
   runtime: BrowserRuntime = new FakeBrowserRuntime({ firstPid: 4500 }),
   repositories = createRepositories(),
+  fingerprintGenerator: FingerprintGenerator = {
+    async generate() {
+      return { navigator: { platform: "Windows", languages: ["en-US"] } };
+    },
+  },
 ): Promise<{
   readonly app: NestFastifyApplication;
   readonly lifecycle: BrowserLifecycleService;
@@ -149,9 +205,10 @@ async function openRuntimeApp(
   const lifecycle = new BrowserLifecycleService(profiles, runs, runtime, undefined, {
     profileDirectoryFor: (id) => `C:/profiles/${id}`,
     createRunId: () => "00000000-0000-4000-8000-000000000010",
+    fingerprintGenerator,
   });
 
-  const app = await buildApp({
+  const app = await buildTestApp({
     profileRepository: profiles,
     browserLifecycleService: lifecycle,
   });
@@ -791,6 +848,9 @@ test("updates fingerprint mode through the session-protected API without startin
     expect(
       openApiDocument.paths["/profiles/{profileId}/fingerprint"]?.patch?.responses,
     ).toHaveProperty("409");
+    expect(
+      openApiDocument.paths["/profiles/{profileId}/fingerprint"]?.patch?.responses,
+    ).toHaveProperty("503");
 
     const disabledResponse = await app
       .getHttpAdapter()
@@ -852,6 +912,296 @@ test("updates fingerprint mode through the session-protected API without startin
     );
 
     expect(runtime.launchCalls).toEqual([]);
+  } finally {
+    await app.close();
+  }
+});
+
+test("generates and atomically persists a fingerprint when enabling a profile without one", async () => {
+  const profileWithoutFingerprint: Profile = {
+    ...secondProfile,
+    fingerprintEnabled: false,
+    identityRef: null,
+  };
+  const repositories = createRepositories([profileWithoutFingerprint]);
+  const generatedConfig = {
+    navigator: { platform: "Windows", languages: ["en-US"] },
+  };
+  const fingerprintGenerator: FingerprintGenerator = {
+    generate: vi.fn(async () => generatedConfig),
+  };
+  const runtime = new FakeBrowserRuntime({ firstPid: 5200 });
+  const { app } = await openRuntimeApp(runtime, repositories, fingerprintGenerator);
+  const headers = await establishSession(app);
+
+  try {
+    const response = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "PATCH",
+        url: `/profiles/${secondProfileId}/fingerprint`,
+        headers,
+        payload: { fingerprintEnabled: true },
+      });
+    const updatedProfile = profileResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(updatedProfile).toMatchObject({
+      id: secondProfileId,
+      fingerprintEnabled: true,
+    });
+    expect(updatedProfile.identityRef).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(fingerprintGenerator.generate).toHaveBeenCalledExactlyOnceWith(
+      updatedProfile.identityRef,
+      "Windows",
+    );
+    expect(repositories.identities.get(updatedProfile.identityRef!)).toMatchObject({
+      config: generatedConfig,
+    });
+    expect(runtime.launchCalls).toEqual([]);
+  } finally {
+    await app.close();
+  }
+});
+
+test("replaces fingerprint identity through the session-protected API without launching a browser", async () => {
+  const disabledProfile: Profile = {
+    ...secondProfile,
+    fingerprintEnabled: false,
+  };
+  const repositories = createRepositories([disabledProfile]);
+  const generatedConfig = {
+    navigator: { platform: "Windows", languages: ["en-US"] },
+  };
+  const fingerprintGenerator: FingerprintGenerator = {
+    generate: vi.fn(async () => generatedConfig),
+  };
+  const runtime = new FakeBrowserRuntime();
+  const { app } = await openRuntimeApp(runtime, repositories, fingerprintGenerator);
+  const headers = await establishSession(app);
+
+  try {
+    const unauthenticatedResponse = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "POST",
+        url: `/profiles/${secondProfileId}/fingerprint/replace`,
+        headers: requestHeaders,
+      });
+    expect(unauthenticatedResponse.statusCode).toBe(401);
+
+    const openApiResponse = await app.getHttpAdapter().getInstance().inject({
+      method: "GET",
+      url: "/docs-json",
+      headers,
+    });
+    const openApiDocument = openApiResponse.json() as {
+      paths: Record<string, { post?: { responses: Record<string, unknown> } }>;
+    };
+    const responses =
+      openApiDocument.paths["/profiles/{profileId}/fingerprint/replace"]?.post
+        ?.responses;
+    expect(responses).toHaveProperty("200");
+    expect(responses).toHaveProperty("409");
+    expect(responses).toHaveProperty("503");
+
+    const missingProfileResponse = await app.getHttpAdapter().getInstance().inject({
+      method: "POST",
+      url: "/profiles/00000000-0000-4000-8000-000000000099/fingerprint/replace",
+      headers,
+    });
+    expect(missingProfileResponse.statusCode).toBe(404);
+    expect(apiErrorSchema.parse(missingProfileResponse.json()).error.code).toBe(
+      "PROFILE_NOT_FOUND",
+    );
+
+    const response = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "POST",
+        url: `/profiles/${secondProfileId}/fingerprint/replace`,
+        headers,
+      });
+    const updatedProfile = profileResponseSchema.parse(response.json());
+
+    expect(response.statusCode).toBe(200);
+    expect(updatedProfile).toMatchObject({
+      id: secondProfileId,
+      fingerprintEnabled: false,
+    });
+    expect(updatedProfile.identityRef).not.toBe(disabledProfile.identityRef);
+    expect(fingerprintGenerator.generate).toHaveBeenCalledExactlyOnceWith(
+      updatedProfile.identityRef,
+      "Windows",
+    );
+    expect(repositories.identities.get(updatedProfile.identityRef!)).toMatchObject({
+      config: generatedConfig,
+    });
+    expect(runtime.launchCalls).toEqual([]);
+  } finally {
+    await app.close();
+  }
+});
+
+test("changes a disabled profile platform and generates a matching identity when enabled", async () => {
+  const disabledProfile: Profile = {
+    ...secondProfile,
+    fingerprintEnabled: false,
+  };
+  const repositories = createRepositories([disabledProfile]);
+  const previousIdentity: FingerprintIdentity = {
+    id: disabledProfile.identityRef!,
+    formatVersion: 1,
+    config: { navigator: { platform: "Windows", languages: ["en-US"] } },
+    createdAt: disabledProfile.createdAt,
+  };
+  repositories.identities.set(previousIdentity.id, previousIdentity);
+  const fingerprintGenerator: FingerprintGenerator = {
+    generate: vi.fn(async (_identityId: string, platform = "Windows") => ({
+      navigator: { platform, languages: ["en-US"] },
+    })),
+  };
+  const runtime = new FakeBrowserRuntime();
+  const { app } = await openRuntimeApp(runtime, repositories, fingerprintGenerator);
+  const headers = await establishSession(app);
+
+  try {
+    const unauthenticatedResponse = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "PATCH",
+        url: `/profiles/${secondProfileId}/fingerprint/platform`,
+        headers: requestHeaders,
+        payload: { fingerprintPlatform: "macOS" },
+      });
+    expect(unauthenticatedResponse.statusCode).toBe(401);
+
+    const invalidPlatformResponse = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "PATCH",
+        url: `/profiles/${secondProfileId}/fingerprint/platform`,
+        headers,
+        payload: { fingerprintPlatform: "Android" },
+      });
+    expect(invalidPlatformResponse.statusCode).toBe(400);
+    expect(apiErrorSchema.parse(invalidPlatformResponse.json()).error.code).toBe(
+      "VALIDATION_ERROR",
+    );
+
+    const openApiResponse = await app.getHttpAdapter().getInstance().inject({
+      method: "GET",
+      url: "/docs-json",
+      headers,
+    });
+    const openApiDocument = openApiResponse.json() as {
+      paths: Record<string, { patch?: { responses: Record<string, unknown> } }>;
+    };
+    const platformResponses =
+      openApiDocument.paths["/profiles/{profileId}/fingerprint/platform"]?.patch
+        ?.responses;
+    expect(platformResponses).toHaveProperty("200");
+    expect(platformResponses).toHaveProperty("400");
+    expect(platformResponses).toHaveProperty("404");
+    expect(platformResponses).toHaveProperty("409");
+    expect(platformResponses).toHaveProperty("503");
+
+    const platformResponse = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "PATCH",
+        url: `/profiles/${secondProfileId}/fingerprint/platform`,
+        headers,
+        payload: { fingerprintPlatform: "macOS" },
+      });
+    expect(platformResponse.statusCode, platformResponse.body).toBe(200);
+    const platformProfile = profileResponseSchema.parse(platformResponse.json());
+    expect(platformProfile).toMatchObject({
+      fingerprintPlatform: "macOS",
+      fingerprintEnabled: false,
+      identityRef: null,
+    });
+    expect(fingerprintGenerator.generate).not.toHaveBeenCalled();
+    expect(repositories.identities.get(previousIdentity.id)).toEqual(previousIdentity);
+
+    const enableResponse = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "PATCH",
+        url: `/profiles/${secondProfileId}/fingerprint`,
+        headers,
+        payload: { fingerprintEnabled: true },
+      });
+    expect(enableResponse.statusCode, enableResponse.body).toBe(200);
+    const enabledProfile = profileResponseSchema.parse(enableResponse.json());
+    expect(enabledProfile).toMatchObject({
+      fingerprintPlatform: "macOS",
+      fingerprintEnabled: true,
+    });
+    expect(enabledProfile.identityRef).not.toBe(previousIdentity.id);
+    expect(fingerprintGenerator.generate).toHaveBeenCalledExactlyOnceWith(
+      enabledProfile.identityRef,
+      "macOS",
+    );
+    expect(repositories.identities.get(enabledProfile.identityRef!)).toMatchObject({
+      config: { navigator: { platform: "macOS" } },
+    });
+    expect(runtime.launchCalls).toEqual([]);
+  } finally {
+    await app.close();
+  }
+});
+
+test("returns a safe 503 and preserves a profile when fingerprint generation is unavailable", async () => {
+  const profileWithoutFingerprint: Profile = {
+    ...secondProfile,
+    fingerprintEnabled: false,
+    identityRef: null,
+  };
+  const repositories = createRepositories([profileWithoutFingerprint]);
+  const fingerprintGenerator: FingerprintGenerator = {
+    async generate() {
+      throw new FingerprintGenerationError("RUNTIME_NOT_INSTALLED");
+    },
+  };
+  const { app } = await openRuntimeApp(
+    new FakeBrowserRuntime(),
+    repositories,
+    fingerprintGenerator,
+  );
+  const headers = await establishSession(app);
+
+  try {
+    const response = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "PATCH",
+        url: `/profiles/${secondProfileId}/fingerprint`,
+        headers,
+        payload: { fingerprintEnabled: true },
+      });
+
+    expect(response.statusCode).toBe(503);
+    expect(apiErrorSchema.parse(response.json())).toEqual({
+      error: {
+        code: "FINGERPRINT_RUNTIME_NOT_READY",
+        message: "Fingerprint runtime is not installed or is incomplete",
+      },
+    });
+    await expect(repositories.profiles.findById(secondProfileId)).resolves.toEqual(
+      profileWithoutFingerprint,
+    );
+    expect(repositories.identities.size).toBe(0);
   } finally {
     await app.close();
   }

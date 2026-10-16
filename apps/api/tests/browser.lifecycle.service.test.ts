@@ -1,6 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
 import { BrowserLifecycleService } from "../src/application/browserRuns/browser.lifecycle.service.ts";
 import { ActiveBrowserRunConflictError } from "../src/application/browserRuns/browser.run.errors.ts";
+import { FingerprintGenerationError } from "../src/application/fingerprints/fingerprint.generator.ts";
+import type { FingerprintIdentity } from "../src/application/fingerprints/fingerprint.identity.repository.ts";
+import type { FingerprintGenerator } from "../src/application/fingerprints/fingerprint.generator.ts";
 import type {
   BrowserRun,
   BrowserRunRepository,
@@ -78,6 +81,7 @@ const firstProfile: Profile = {
   id: "profile-001",
   profileCode: "profile-001",
   displayName: "Research profile",
+  fingerprintPlatform: "Windows",
   fingerprintEnabled: true,
   identityRef: "identity-001",
   createdAt: timestamp,
@@ -95,6 +99,7 @@ const secondProfile: Profile = {
 
 class MemoryProfileRepository implements ProfileRepository {
   private readonly profiles = new Map<string, Profile>();
+  readonly identities = new Map<string, FingerprintIdentity>();
 
   constructor(profiles: readonly Profile[] = [firstProfile, secondProfile]) {
     for (const profile of profiles) {
@@ -105,6 +110,7 @@ class MemoryProfileRepository implements ProfileRepository {
   async create(profile: ProfileDraft): Promise<Profile> {
     const created = {
       ...profile,
+      fingerprintPlatform: profile.fingerprintPlatform ?? "Windows",
       profileCode: `profile-${String(this.profiles.size + 1).padStart(3, "0")}`,
     };
     this.profiles.set(created.id, created);
@@ -123,6 +129,45 @@ class MemoryProfileRepository implements ProfileRepository {
     if (profile === undefined) return null;
 
     const updatedProfile = { ...profile, ...settings };
+    this.profiles.set(id, updatedProfile);
+    return updatedProfile;
+  }
+
+  async enableFingerprintWithIdentity(
+    id: string,
+    identity: FingerprintIdentity,
+    updatedAt: string,
+  ): Promise<Profile | null> {
+    const profile = this.profiles.get(id);
+    if (profile === undefined) return null;
+
+    const updatedProfile: Profile = {
+      ...profile,
+      fingerprintEnabled: true,
+      identityRef: identity.id,
+      updatedAt,
+    };
+    this.identities.set(identity.id, structuredClone(identity));
+    this.profiles.set(id, updatedProfile);
+    return updatedProfile;
+  }
+
+  async replaceFingerprintIdentity(
+    id: string,
+    identity: FingerprintIdentity,
+    updatedAt: string,
+    fingerprintPlatform?: Profile["fingerprintPlatform"],
+  ): Promise<Profile | null> {
+    const profile = this.profiles.get(id);
+    if (profile === undefined) return null;
+
+    const updatedProfile: Profile = {
+      ...profile,
+      ...(fingerprintPlatform === undefined ? {} : { fingerprintPlatform }),
+      identityRef: identity.id,
+      updatedAt,
+    };
+    this.identities.set(identity.id, structuredClone(identity));
     this.profiles.set(id, updatedProfile);
     return updatedProfile;
   }
@@ -335,15 +380,24 @@ function createService(
     readonly shutdownTimeoutMs?: number;
     readonly now?: () => string;
   } = {},
+  fingerprintGenerator?: FingerprintGenerator,
 ): {
   readonly service: BrowserLifecycleService;
   readonly profiles: MemoryProfileRepository;
   readonly runs: MemoryBrowserRunRepository;
+  readonly fingerprintGenerator: FingerprintGenerator;
 } {
   let sequence = 0;
+  let identitySequence = 0;
+  const generator: FingerprintGenerator = fingerprintGenerator ?? {
+    generate: vi.fn(async (_identityId, platform = "Windows") => {
+      return { navigator: { platform, languages: ["en-US"] } };
+    }),
+  };
   return {
     profiles,
     runs,
+    fingerprintGenerator: generator,
     service: new BrowserLifecycleService(
       profiles,
       runs,
@@ -353,7 +407,9 @@ function createService(
         profileDirectoryFor: (profileId) => `C:/profiles/${profileId}`,
         now: timeouts.now ?? (() => timestamp),
         createRunId: () => `run-${++sequence}`,
-        createFingerprintIdentityRef: () => `test-identity:generated-${++sequence}`,
+        createFingerprintIdentityId: () =>
+          `00000000-0000-4000-8000-${String(++identitySequence).padStart(12, "0")}`,
+        fingerprintGenerator: generator,
         launchTimeoutMs: timeouts.launchTimeoutMs ?? 5_000,
         recoveryTimeoutMs: timeouts.recoveryTimeoutMs ?? 5_000,
         stopTimeoutMs: timeouts.stopTimeoutMs ?? 5_000,
@@ -428,7 +484,7 @@ describe("BrowserLifecycleService", () => {
       ...firstProfile,
       fingerprintEnabled: false,
     };
-    const { service } = createService(
+    const { service, fingerprintGenerator } = createService(
       new FakeBrowserRuntime(),
       new MemoryProfileRepository([profileWithoutFingerprint]),
     );
@@ -439,25 +495,266 @@ describe("BrowserLifecycleService", () => {
       fingerprintEnabled: true,
       identityRef: firstProfile.identityRef,
     });
+    expect(fingerprintGenerator.generate).not.toHaveBeenCalled();
   });
 
-  test("assigns a server-created identity when enabling a profile without one", async () => {
+  test.each(["Windows", "macOS", "Linux"] as const)(
+    "generates an identity using the profile platform %s when enabling",
+    async (fingerprintPlatform) => {
+      const profileWithoutIdentity = {
+        ...firstProfile,
+        fingerprintPlatform,
+        fingerprintEnabled: false,
+        identityRef: null,
+      };
+      const { service, profiles, fingerprintGenerator } = createService(
+        new FakeBrowserRuntime(),
+        new MemoryProfileRepository([profileWithoutIdentity]),
+      );
+
+      await expect(
+        service.updateFingerprintMode(firstProfile.id, true),
+      ).resolves.toMatchObject({
+        fingerprintEnabled: true,
+        identityRef: "00000000-0000-4000-8000-000000000001",
+      });
+      expect(fingerprintGenerator.generate).toHaveBeenCalledExactlyOnceWith(
+        "00000000-0000-4000-8000-000000000001",
+        fingerprintPlatform,
+      );
+      expect(
+        profiles.identities.get("00000000-0000-4000-8000-000000000001"),
+      ).toMatchObject({
+        formatVersion: 1,
+        config: {
+          navigator: { platform: fingerprintPlatform, languages: ["en-US"] },
+        },
+      });
+    },
+  );
+
+  test.each(["Windows", "macOS", "Linux"] as const)(
+    "replaces identity using the profile platform %s without changing mode",
+    async (fingerprintPlatform) => {
+      const updatedAt = "2026-09-24T10:00:00.000Z";
+      const disabledProfile = {
+        ...firstProfile,
+        fingerprintPlatform,
+        fingerprintEnabled: false,
+      };
+      const { service, profiles, fingerprintGenerator } = createService(
+        new FakeBrowserRuntime(),
+        new MemoryProfileRepository([disabledProfile]),
+        undefined,
+        { now: () => updatedAt },
+      );
+      const previousIdentity: FingerprintIdentity = {
+        id: firstProfile.identityRef!,
+        formatVersion: 1,
+        config: {
+          navigator: { platform: fingerprintPlatform, languages: ["en-US"] },
+        },
+        createdAt: timestamp,
+      };
+      profiles.identities.set(previousIdentity.id, previousIdentity);
+
+      await expect(
+        service.replaceFingerprintIdentity(firstProfile.id),
+      ).resolves.toEqual({
+        ...disabledProfile,
+        identityRef: "00000000-0000-4000-8000-000000000001",
+        updatedAt,
+      });
+      expect(fingerprintGenerator.generate).toHaveBeenCalledExactlyOnceWith(
+        "00000000-0000-4000-8000-000000000001",
+        fingerprintPlatform,
+      );
+      expect(profiles.identities.get(previousIdentity.id)).toEqual(previousIdentity);
+      expect(
+        profiles.identities.get("00000000-0000-4000-8000-000000000001"),
+      ).toMatchObject({
+        config: {
+          navigator: { platform: fingerprintPlatform, languages: ["en-US"] },
+        },
+      });
+    },
+  );
+
+  test("leaves the current identity assigned when replacement generation fails", async () => {
+    const previousIdentity: FingerprintIdentity = {
+      id: firstProfile.identityRef!,
+      formatVersion: 1,
+      config: { navigator: { platform: "Windows", languages: ["en-US"] } },
+      createdAt: timestamp,
+    };
+    const profiles = new MemoryProfileRepository([firstProfile]);
+    profiles.identities.set(previousIdentity.id, previousIdentity);
+    const fingerprintGenerator: FingerprintGenerator = {
+      async generate() {
+        throw new FingerprintGenerationError("FINGERPRINT_GENERATION_FAILED");
+      },
+    };
+    const { service } = createService(
+      new FakeBrowserRuntime(),
+      profiles,
+      undefined,
+      {},
+      fingerprintGenerator,
+    );
+
+    await expect(
+      service.replaceFingerprintIdentity(firstProfile.id),
+    ).rejects.toMatchObject({
+      code: "FINGERPRINT_GENERATION_FAILED",
+    });
+    await expect(profiles.findById(firstProfile.id)).resolves.toEqual(firstProfile);
+    expect(profiles.identities).toEqual(
+      new Map([[previousIdentity.id, previousIdentity]]),
+    );
+  });
+
+  test("changes an enabled profile platform with a new matching identity", async () => {
+    const previousIdentity: FingerprintIdentity = {
+      id: firstProfile.identityRef!,
+      formatVersion: 1,
+      config: { navigator: { platform: "Windows", languages: ["en-US"] } },
+      createdAt: timestamp,
+    };
+    const profiles = new MemoryProfileRepository([firstProfile]);
+    profiles.identities.set(previousIdentity.id, previousIdentity);
+    const { service, fingerprintGenerator } = createService(
+      new FakeBrowserRuntime(),
+      profiles,
+      undefined,
+      { now: () => "2026-10-17T10:00:00.000Z" },
+    );
+
+    await expect(
+      service.updateFingerprintPlatform(firstProfile.id, "macOS"),
+    ).resolves.toMatchObject({
+      fingerprintPlatform: "macOS",
+      fingerprintEnabled: true,
+      identityRef: "00000000-0000-4000-8000-000000000001",
+      updatedAt: "2026-10-17T10:00:00.000Z",
+    });
+    expect(fingerprintGenerator.generate).toHaveBeenCalledExactlyOnceWith(
+      "00000000-0000-4000-8000-000000000001",
+      "macOS",
+    );
+    expect(profiles.identities.get(previousIdentity.id)).toEqual(previousIdentity);
+    expect(
+      profiles.identities.get("00000000-0000-4000-8000-000000000001"),
+    ).toMatchObject({ config: { navigator: { platform: "macOS" } } });
+  });
+
+  test("timestamps a platform update after fingerprint generation completes", async () => {
+    const generationCompletedAt = "2026-10-17T10:00:01.000Z";
+    let generationCompleted = false;
+    const fingerprintGenerator: FingerprintGenerator = {
+      async generate() {
+        generationCompleted = true;
+        return { navigator: { platform: "macOS", languages: ["en-US"] } };
+      },
+    };
+    const profiles = new MemoryProfileRepository([firstProfile]);
+    const { service } = createService(
+      new FakeBrowserRuntime(),
+      profiles,
+      undefined,
+      {
+        now: () =>
+          generationCompleted ? generationCompletedAt : "2026-10-17T10:00:00.000Z",
+      },
+      fingerprintGenerator,
+    );
+
+    const updatedProfile = await service.updateFingerprintPlatform(
+      firstProfile.id,
+      "macOS",
+    );
+
+    expect(updatedProfile.updatedAt).toBe(generationCompletedAt);
+    expect(
+      profiles.identities.get("00000000-0000-4000-8000-000000000001")?.createdAt,
+    ).toBe(generationCompletedAt);
+  });
+
+  test("changes a disabled profile platform without generation and detaches its old identity", async () => {
+    const previousIdentity: FingerprintIdentity = {
+      id: firstProfile.identityRef!,
+      formatVersion: 1,
+      config: { navigator: { platform: "Windows", languages: ["en-US"] } },
+      createdAt: timestamp,
+    };
+    const disabledProfile = { ...firstProfile, fingerprintEnabled: false };
+    const profiles = new MemoryProfileRepository([disabledProfile]);
+    profiles.identities.set(previousIdentity.id, previousIdentity);
+    const { service, fingerprintGenerator } = createService(
+      new FakeBrowserRuntime(),
+      profiles,
+    );
+
+    await expect(
+      service.updateFingerprintPlatform(firstProfile.id, "Linux"),
+    ).resolves.toMatchObject({
+      fingerprintPlatform: "Linux",
+      fingerprintEnabled: false,
+      identityRef: null,
+    });
+    expect(fingerprintGenerator.generate).not.toHaveBeenCalled();
+    expect(profiles.identities.get(previousIdentity.id)).toEqual(previousIdentity);
+  });
+
+  test("leaves an enabled profile unchanged when platform-specific generation fails", async () => {
+    const fingerprintGenerator: FingerprintGenerator = {
+      async generate() {
+        throw new FingerprintGenerationError("FINGERPRINT_GENERATION_FAILED");
+      },
+    };
+    const profiles = new MemoryProfileRepository([firstProfile]);
+    const { service } = createService(
+      new FakeBrowserRuntime(),
+      profiles,
+      undefined,
+      {},
+      fingerprintGenerator,
+    );
+
+    await expect(
+      service.updateFingerprintPlatform(firstProfile.id, "macOS"),
+    ).rejects.toMatchObject({ code: "FINGERPRINT_GENERATION_FAILED" });
+    await expect(profiles.findById(firstProfile.id)).resolves.toEqual(firstProfile);
+    expect(profiles.identities).toEqual(new Map());
+  });
+
+  test("leaves a profile disabled when fingerprint generation fails", async () => {
     const profileWithoutIdentity = {
       ...firstProfile,
       fingerprintEnabled: false,
       identityRef: null,
     };
-    const { service } = createService(
+    const fingerprintGenerator: FingerprintGenerator = {
+      async generate() {
+        throw new FingerprintGenerationError("RUNTIME_NOT_INSTALLED");
+      },
+    };
+    const { service, profiles } = createService(
       new FakeBrowserRuntime(),
       new MemoryProfileRepository([profileWithoutIdentity]),
+      undefined,
+      {},
+      fingerprintGenerator,
     );
 
     await expect(
       service.updateFingerprintMode(firstProfile.id, true),
-    ).resolves.toMatchObject({
-      fingerprintEnabled: true,
-      identityRef: "test-identity:generated-1",
+    ).rejects.toMatchObject({
+      code: "RUNTIME_NOT_INSTALLED",
     });
+    await expect(profiles.findById(firstProfile.id)).resolves.toEqual(
+      profileWithoutIdentity,
+    );
+    expect(profiles.identities.size).toBe(0);
   });
 
   test("rejects fingerprint changes after shutdown", async () => {
@@ -529,6 +826,12 @@ describe("BrowserLifecycleService", () => {
 
       await expect(
         service.updateFingerprintMode(firstProfile.id, false),
+      ).rejects.toBeInstanceOf(ActiveBrowserRunConflictError);
+      await expect(
+        service.replaceFingerprintIdentity(firstProfile.id),
+      ).rejects.toBeInstanceOf(ActiveBrowserRunConflictError);
+      await expect(
+        service.updateFingerprintPlatform(firstProfile.id, "macOS"),
       ).rejects.toBeInstanceOf(ActiveBrowserRunConflictError);
       await expect(profiles.findById(firstProfile.id)).resolves.toEqual(firstProfile);
     },

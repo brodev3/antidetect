@@ -6,6 +6,12 @@ export const createFingerprintIdentitiesMigration: Migration = {
   version: 4,
   name: "create_fingerprint_identities",
   async up(database: Kysely<AppDatabaseSchema>): Promise<void> {
+    await sql`
+      ALTER TABLE profiles
+      ADD COLUMN fingerprint_platform TEXT NOT NULL DEFAULT 'Windows'
+      CHECK (fingerprint_platform IN ('Windows', 'macOS', 'Linux'))
+    `.execute(database);
+
     // Keep historical limits fixed; new formats require a new migration.
     await sql`
       CREATE TABLE fingerprint_identities (

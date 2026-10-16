@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
 import {
+  DEFAULT_FINGERPRINT_PLATFORM,
   FingerprintGenerationError,
   type FingerprintGenerator,
 } from "../src/application/fingerprints/fingerprint.generator.ts";
@@ -33,6 +34,7 @@ const config = { navigator: { platform: "Windows", languages: ["en-US"] } };
 const metadata = {
   id: profileId,
   displayName: "Research profile",
+  fingerprintPlatform: DEFAULT_FINGERPRINT_PLATFORM,
   createdAt: timestamp,
   updatedAt: timestamp,
 };
@@ -47,12 +49,14 @@ function buildSubject() {
   const repository = {
     create: vi.fn<ProfileRepository["create"]>().mockImplementation(async (draft) => ({
       ...draft,
+      fingerprintPlatform: draft.fingerprintPlatform ?? DEFAULT_FINGERPRINT_PLATFORM,
       profileCode: "profile-001",
     })),
     createWithFingerprint: vi
       .fn<ProfileFingerprintCreationRepository["createWithFingerprint"]>()
       .mockImplementation(async (draft, identity) => ({
         ...draft,
+        fingerprintPlatform: draft.fingerprintPlatform ?? DEFAULT_FINGERPRINT_PLATFORM,
         profileCode: "profile-001",
         fingerprintEnabled: true,
         identityRef: identity.id,
@@ -93,7 +97,10 @@ test("generates a fingerprint and passes server-owned metadata to atomic persist
   await expect(
     service.create({ displayName: metadata.displayName, fingerprintEnabled: true }),
   ).resolves.toEqual(expectedProfile);
-  expect(generator.generate).toHaveBeenCalledExactlyOnceWith(identityId);
+  expect(generator.generate).toHaveBeenCalledExactlyOnceWith(
+    identityId,
+    DEFAULT_FINGERPRINT_PLATFORM,
+  );
   expect(repository.createWithFingerprint).toHaveBeenCalledExactlyOnceWith(metadata, {
     id: identityId,
     formatVersion: FINGERPRINT_FORMAT_VERSION,
@@ -103,6 +110,23 @@ test("generates a fingerprint and passes server-owned metadata to atomic persist
   expect(repository.create).not.toHaveBeenCalled();
   expect(dependencies.createId).toHaveBeenCalledTimes(2);
   expect(dependencies.now).toHaveBeenCalledTimes(1);
+});
+
+test("generates and persists the selected fingerprint platform", async () => {
+  const { service, repository, generator } = buildSubject();
+
+  await expect(
+    service.create({
+      displayName: metadata.displayName,
+      fingerprintEnabled: true,
+      fingerprintPlatform: "macOS",
+    }),
+  ).resolves.toMatchObject({ fingerprintPlatform: "macOS" });
+  expect(generator.generate).toHaveBeenCalledExactlyOnceWith(identityId, "macOS");
+  expect(repository.createWithFingerprint).toHaveBeenCalledExactlyOnceWith(
+    { ...metadata, fingerprintPlatform: "macOS" },
+    expect.objectContaining({ id: identityId }),
+  );
 });
 
 test("does not call persistence or choose timestamps until generation has completed", async () => {
@@ -115,7 +139,10 @@ test("does not call persistence or choose timestamps until generation has comple
   );
   const input = { displayName: metadata.displayName, fingerprintEnabled: true };
   const pending = service.create(input);
-  expect(generator.generate).toHaveBeenCalledExactlyOnceWith(identityId);
+  expect(generator.generate).toHaveBeenCalledExactlyOnceWith(
+    identityId,
+    DEFAULT_FINGERPRINT_PLATFORM,
+  );
   expect(repository.create).not.toHaveBeenCalled();
   expect(repository.createWithFingerprint).not.toHaveBeenCalled();
   expect(dependencies.now).not.toHaveBeenCalled();
@@ -184,7 +211,10 @@ test("creates a fresh profile and fingerprint identity for each attempt", async 
     .mockReturnValueOnce(secondIdentityId);
   await service.create({ displayName: "First", fingerprintEnabled: true });
   await service.create({ displayName: "Second", fingerprintEnabled: true });
-  expect(generator.generate.mock.calls).toEqual([[identityId], [secondIdentityId]]);
+  expect(generator.generate.mock.calls).toEqual([
+    [identityId, DEFAULT_FINGERPRINT_PLATFORM],
+    [secondIdentityId, DEFAULT_FINGERPRINT_PLATFORM],
+  ]);
   expect(
     repository.createWithFingerprint.mock.calls.map(([draft, identity]) => [
       draft.id,
@@ -228,7 +258,10 @@ test("uses UUIDs and matching UTC timestamps with default dependencies", async (
   expect(created.id).not.toBe(created.identityRef);
   expect(created.createdAt).toBe(created.updatedAt);
   expect(new Date(created.createdAt).toISOString()).toBe(created.createdAt);
-  expect(generator.generate).toHaveBeenCalledExactlyOnceWith(created.identityRef);
+  expect(generator.generate).toHaveBeenCalledExactlyOnceWith(
+    created.identityRef,
+    DEFAULT_FINGERPRINT_PLATFORM,
+  );
 });
 
 test("holds no SQLite transaction while generating and allows creation without a fingerprint", async () => {

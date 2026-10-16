@@ -4,8 +4,12 @@ import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fa
 import { cleanupOpenApiDoc } from "nestjs-zod";
 import { AppModule } from "./app.module.js";
 import type { BrowserLifecycleService } from "./application/browserRuns/browser.lifecycle.service.js";
-import type { ProfileRepository } from "./application/profiles/profile.repository.js";
+import type { FingerprintGenerator } from "./application/fingerprints/fingerprint.generator.js";
 import type { EngineStatusReader } from "./application/runtime/engine.status.reader.js";
+import type {
+  ProfileFingerprintCreationRepository,
+  ProfileRepository,
+} from "./application/profiles/profile.repository.js";
 import {
   DEFAULT_API_SERVER_CONFIG,
   type ApiServerConfig,
@@ -14,7 +18,8 @@ import { registerApiRequestPolicy } from "./infrastructure/http/api.request.poli
 import { LocalSessionStore } from "./infrastructure/http/local.session.js";
 
 export interface BuildAppOptions {
-  readonly profileRepository: ProfileRepository;
+  readonly profileRepository: ProfileRepository & ProfileFingerprintCreationRepository;
+  readonly fingerprintGenerator: FingerprintGenerator;
   readonly browserLifecycleService?: BrowserLifecycleService;
   readonly engineStatusReader?: EngineStatusReader;
   readonly config?: ApiServerConfig;
@@ -22,6 +27,7 @@ export interface BuildAppOptions {
 
 export async function buildApp({
   profileRepository,
+  fingerprintGenerator,
   browserLifecycleService,
   engineStatusReader,
   config = DEFAULT_API_SERVER_CONFIG,
@@ -30,6 +36,7 @@ export async function buildApp({
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.register(
       profileRepository,
+      fingerprintGenerator,
       localSession,
       browserLifecycleService,
       engineStatusReader,

@@ -1,5 +1,6 @@
 import { InvalidFingerprintIdentityError } from "../../application/fingerprints/fingerprint.identity.errors.js";
 import type { FingerprintIdentity } from "../../application/fingerprints/fingerprint.identity.repository.js";
+import { DEFAULT_FINGERPRINT_PLATFORM } from "../../application/fingerprints/fingerprint.generator.js";
 import type {
   Profile,
   ProfileDraft,
@@ -17,11 +18,20 @@ function toProfile(row: ProfilesTable): Profile {
     id: row.id,
     profileCode: row.profile_code,
     displayName: row.display_name,
+    fingerprintPlatform: row.fingerprint_platform,
     fingerprintEnabled: row.fingerprint_enabled === 1,
     identityRef: row.identity_ref,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function cloneIdentity(identity: FingerprintIdentity): FingerprintIdentity {
+  try {
+    return structuredClone(identity);
+  } catch {
+    throw new InvalidFingerprintIdentityError();
+  }
 }
 
 export class SqliteProfileRepository
@@ -42,15 +52,11 @@ export class SqliteProfileRepository
     const profileSnapshot = {
       id: profile.id,
       displayName: profile.displayName,
+      fingerprintPlatform: profile.fingerprintPlatform ?? DEFAULT_FINGERPRINT_PLATFORM,
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
     };
-    let identitySnapshot: FingerprintIdentity;
-    try {
-      identitySnapshot = structuredClone(identity);
-    } catch {
-      throw new InvalidFingerprintIdentityError();
-    }
+    const identitySnapshot = cloneIdentity(identity);
 
     return this.database.transaction().execute(async (transaction) => {
       const savedIdentity = await new SqliteFingerprintIdentityRepository(
@@ -84,6 +90,9 @@ export class SqliteProfileRepository
       .set({
         fingerprint_enabled: settings.fingerprintEnabled ? 1 : 0,
         identity_ref: settings.identityRef,
+        ...(settings.fingerprintPlatform === undefined
+          ? {}
+          : { fingerprint_platform: settings.fingerprintPlatform }),
         updated_at: settings.updatedAt,
       })
       .where("id", "=", id)
@@ -91,6 +100,81 @@ export class SqliteProfileRepository
       .executeTakeFirst();
 
     return row === undefined ? null : toProfile(row);
+  }
+
+  async enableFingerprintWithIdentity(
+    id: string,
+    identity: FingerprintIdentity,
+    updatedAt: string,
+  ): Promise<Profile | null> {
+    const identitySnapshot = cloneIdentity(identity);
+
+    return this.database.transaction().execute(async (transaction) => {
+      const existing = await transaction
+        .selectFrom("profiles")
+        .select("id")
+        .where("id", "=", id)
+        .executeTakeFirst();
+      if (existing === undefined) return null;
+
+      await new SqliteFingerprintIdentityRepository(transaction).create(
+        identitySnapshot,
+      );
+      const row = await transaction
+        .updateTable("profiles")
+        .set({
+          fingerprint_enabled: 1,
+          identity_ref: identitySnapshot.id,
+          updated_at: updatedAt,
+        })
+        .where("id", "=", id)
+        .returningAll()
+        .executeTakeFirst();
+      if (row === undefined) {
+        throw new Error("Profile disappeared while enabling its fingerprint");
+      }
+
+      return toProfile(row);
+    });
+  }
+
+  async replaceFingerprintIdentity(
+    id: string,
+    identity: FingerprintIdentity,
+    updatedAt: string,
+    fingerprintPlatform?: Profile["fingerprintPlatform"],
+  ): Promise<Profile | null> {
+    const identitySnapshot = cloneIdentity(identity);
+
+    return this.database.transaction().execute(async (transaction) => {
+      const existing = await transaction
+        .selectFrom("profiles")
+        .select("id")
+        .where("id", "=", id)
+        .executeTakeFirst();
+      if (existing === undefined) return null;
+
+      await new SqliteFingerprintIdentityRepository(transaction).create(
+        identitySnapshot,
+      );
+      const row = await transaction
+        .updateTable("profiles")
+        .set({
+          identity_ref: identitySnapshot.id,
+          ...(fingerprintPlatform === undefined
+            ? {}
+            : { fingerprint_platform: fingerprintPlatform }),
+          updated_at: updatedAt,
+        })
+        .where("id", "=", id)
+        .returningAll()
+        .executeTakeFirst();
+      if (row === undefined) {
+        throw new Error("Profile disappeared while replacing its fingerprint identity");
+      }
+
+      return toProfile(row);
+    });
   }
 
   async list({
@@ -145,6 +229,7 @@ async function insertProfile(
 
   const createdProfile: Profile = {
     ...profile,
+    fingerprintPlatform: profile.fingerprintPlatform ?? DEFAULT_FINGERPRINT_PLATFORM,
     profileCode: formatProfileCode(sequence.next_value - 1),
   };
 
@@ -154,6 +239,7 @@ async function insertProfile(
       id: createdProfile.id,
       profile_code: createdProfile.profileCode,
       display_name: createdProfile.displayName,
+      fingerprint_platform: createdProfile.fingerprintPlatform,
       fingerprint_enabled: createdProfile.fingerprintEnabled ? 1 : 0,
       identity_ref: createdProfile.identityRef,
       created_at: createdProfile.createdAt,

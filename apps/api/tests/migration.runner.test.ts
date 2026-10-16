@@ -26,6 +26,7 @@ const profile = {
 const migratedProfile = {
   ...profile,
   profileCode: "profile-001",
+  fingerprintPlatform: "Windows",
   fingerprintEnabled: true,
 } as const;
 
@@ -148,7 +149,12 @@ test("upgrades version three without changing profiles, runs or code sequence", 
 
     await expect(
       database.selectFrom("profiles").selectAll().execute(),
-    ).resolves.toEqual(beforeProfiles);
+    ).resolves.toEqual(
+      beforeProfiles.map((profile) => ({
+        ...profile,
+        fingerprint_platform: "Windows",
+      })),
+    );
     await expect(
       database.selectFrom("browser_runs").selectAll().execute(),
     ).resolves.toEqual(beforeRuns);
@@ -168,7 +174,7 @@ test("upgrades version three without changing profiles, runs or code sequence", 
   });
 });
 
-test("rolls back fingerprint table and triggers when version four cannot be recorded", async () => {
+test("rolls back fingerprint and platform schema when version four cannot be recorded", async () => {
   await withDatabase(async (database) => {
     await prepareVersionThree(database);
     const beforeHistory = await database
@@ -196,6 +202,12 @@ test("rolls back fingerprint table and triggers when version four cannot be reco
       )
     `.execute(database),
     ).resolves.toMatchObject({ rows: [] });
+    const profileColumns = await sql<{
+      name: string;
+    }>`PRAGMA table_info(profiles)`.execute(database);
+    expect(profileColumns.rows.map((column) => column.name)).not.toContain(
+      "fingerprint_platform",
+    );
     await expect(
       database.selectFrom("schema_migrations").selectAll().execute(),
     ).resolves.toEqual(beforeHistory);

@@ -5,8 +5,15 @@ import type {
 } from "./application/browserRuns/browser.run.repository.js";
 import { BrowserLifecycleService } from "./application/browserRuns/browser.lifecycle.service.js";
 import type {
+  FingerprintGenerator,
+  FingerprintPlatform,
+} from "./application/fingerprints/fingerprint.generator.js";
+import { DEFAULT_FINGERPRINT_PLATFORM } from "./application/fingerprints/fingerprint.generator.js";
+import type { FingerprintIdentity } from "./application/fingerprints/fingerprint.identity.repository.js";
+import type {
   Profile,
   ProfileDraft,
+  ProfileFingerprintCreationRepository,
   ProfileFingerprintSettings,
   ProfileListOptions,
   ProfileRepository,
@@ -23,7 +30,9 @@ const fakeApiConfig = {
 const fakeProfileId = "00000000-0000-4000-8000-000000000001";
 const seedTimestamp = "2026-09-26T00:00:00.000Z";
 
-class FakeProfileRepository implements ProfileRepository {
+class FakeProfileRepository
+  implements ProfileRepository, ProfileFingerprintCreationRepository
+{
   private readonly profiles = new Map<string, Profile>([
     [
       fakeProfileId,
@@ -31,6 +40,7 @@ class FakeProfileRepository implements ProfileRepository {
         id: fakeProfileId,
         profileCode: "profile-001",
         displayName: "Fake runtime profile",
+        fingerprintPlatform: DEFAULT_FINGERPRINT_PLATFORM,
         fingerprintEnabled: true,
         identityRef: `test-identity:${fakeProfileId}`,
         createdAt: seedTimestamp,
@@ -38,16 +48,30 @@ class FakeProfileRepository implements ProfileRepository {
       },
     ],
   ]);
+  private readonly identities = new Map<string, FingerprintIdentity>();
   private nextProfileCode = 2;
 
   async create(draft: ProfileDraft): Promise<Profile> {
     const profile: Profile = {
       ...draft,
+      fingerprintPlatform: draft.fingerprintPlatform ?? DEFAULT_FINGERPRINT_PLATFORM,
       profileCode: `profile-${String(this.nextProfileCode).padStart(3, "0")}`,
     };
     this.nextProfileCode += 1;
     this.profiles.set(profile.id, profile);
     return profile;
+  }
+
+  async createWithFingerprint(
+    draft: Omit<ProfileDraft, "fingerprintEnabled" | "identityRef">,
+    identity: FingerprintIdentity,
+  ): Promise<Profile> {
+    this.identities.set(identity.id, identity);
+    return this.create({
+      ...draft,
+      fingerprintEnabled: true,
+      identityRef: identity.id,
+    });
   }
 
   async findById(profileId: string): Promise<Profile | null> {
@@ -62,6 +86,45 @@ class FakeProfileRepository implements ProfileRepository {
     if (profile === undefined) return null;
 
     const updatedProfile = { ...profile, ...settings };
+    this.profiles.set(profileId, updatedProfile);
+    return updatedProfile;
+  }
+
+  async enableFingerprintWithIdentity(
+    profileId: string,
+    identity: FingerprintIdentity,
+    updatedAt: string,
+  ): Promise<Profile | null> {
+    const profile = this.profiles.get(profileId);
+    if (profile === undefined) return null;
+
+    const updatedProfile: Profile = {
+      ...profile,
+      fingerprintEnabled: true,
+      identityRef: identity.id,
+      updatedAt,
+    };
+    this.identities.set(identity.id, structuredClone(identity));
+    this.profiles.set(profileId, updatedProfile);
+    return updatedProfile;
+  }
+
+  async replaceFingerprintIdentity(
+    profileId: string,
+    identity: FingerprintIdentity,
+    updatedAt: string,
+    fingerprintPlatform?: Profile["fingerprintPlatform"],
+  ): Promise<Profile | null> {
+    const profile = this.profiles.get(profileId);
+    if (profile === undefined) return null;
+
+    const updatedProfile: Profile = {
+      ...profile,
+      ...(fingerprintPlatform === undefined ? {} : { fingerprintPlatform }),
+      identityRef: identity.id,
+      updatedAt,
+    };
+    this.identities.set(identity.id, structuredClone(identity));
     this.profiles.set(profileId, updatedProfile);
     return updatedProfile;
   }
@@ -135,16 +198,28 @@ const engineStatusReader =
   (process.env.ANTIDETECT_HOME !== undefined || process.env.LOCALAPPDATA !== undefined)
     ? new ShardXEngineStatusReader(resolveAppPaths().runtimeDir)
     : undefined;
+const fingerprintGenerator: FingerprintGenerator = {
+  async generate(
+    _identityId: string,
+    platform: FingerprintPlatform = DEFAULT_FINGERPRINT_PLATFORM,
+  ) {
+    return { navigator: { platform, languages: ["en-US"] } };
+  },
+};
 const lifecycle = new BrowserLifecycleService(
   profiles,
   new FakeBrowserRunRepository(),
   new FakeBrowserRuntime(),
   undefined,
-  { profileDirectoryFor: (profileId) => `fake-profile://${profileId}` },
+  {
+    profileDirectoryFor: (profileId) => `fake-profile://${profileId}`,
+    fingerprintGenerator,
+  },
 );
 const app = await buildApp({
   config: fakeApiConfig,
   profileRepository: profiles,
+  fingerprintGenerator,
   browserLifecycleService: lifecycle,
   ...(engineStatusReader === undefined ? {} : { engineStatusReader }),
 });

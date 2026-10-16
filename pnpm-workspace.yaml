@@ -3,7 +3,7 @@ packages:
   - packages/*
 
 allowBuilds:
-  "@proxyshard/shardx@https://codeload.github.com/brodev3/ShardBrowser/tar.gz/cda916c6e5d93221cb96df3bd9342e8c0232aba8#path:sdks/node": true
+  "@proxyshard/shardx@https://codeload.github.com/brodev3/ShardBrowser/tar.gz/cddee94ac7d8e87d3cb1176319e40266e12d5858#path:sdks/node": true
   better-sqlite3: true
   "@scarf/scarf@1.4.0": false
 

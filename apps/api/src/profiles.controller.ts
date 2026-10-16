@@ -1,8 +1,10 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query } from "@nestjs/common";
 import {
   ApiBadRequestResponse,
+  ApiInternalServerErrorResponse,
   ApiNotFoundResponse,
   ApiQuery,
+  ApiServiceUnavailableResponse,
   ApiTags,
 } from "@nestjs/swagger";
 import {
@@ -22,6 +24,7 @@ import {
   type ProfileResponse,
 } from "@antidetect/contracts";
 import { ZodResponse, createZodDto } from "nestjs-zod";
+import { ProfileCreationService } from "./application/profiles/profile.creation.service.js";
 import { ProfileService } from "./application/profiles/profile.service.js";
 
 class ApiErrorDto extends createZodDto(apiErrorSchema) {}
@@ -34,14 +37,19 @@ class ProfileResponseDto extends createZodDto(profileResponseSchema) {}
 @ApiTags("profiles")
 @Controller("profiles")
 export class ProfilesController {
-  constructor(private readonly profileService: ProfileService) {}
+  constructor(
+    private readonly profileService: ProfileService,
+    private readonly profileCreationService: ProfileCreationService,
+  ) {}
 
   @Post()
   @HttpCode(201)
   @ApiBadRequestResponse({ type: ApiErrorDto })
+  @ApiInternalServerErrorResponse({ type: ApiErrorDto })
+  @ApiServiceUnavailableResponse({ type: ApiErrorDto })
   @ZodResponse({ status: 201, type: ProfileResponseDto })
   async create(@Body() request: CreateProfileRequestDto): Promise<ProfileResponse> {
-    return this.profileService.create(request);
+    return this.profileCreationService.create(request);
   }
 
   @Get()

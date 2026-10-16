@@ -52,8 +52,8 @@ importers:
         specifier: 11.4.7
         version: 11.4.7(@nestjs/common@11.2.1(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.1(@nestjs/common@11.2.1(reflect-metadata@0.2.2)(rxjs@7.8.2))(reflect-metadata@0.2.2)(rxjs@7.8.2))(reflect-metadata@0.2.2)
       '@proxyshard/shardx':
-        specifier: git+https://github.com/brodev3/ShardBrowser.git#cda916c6e5d93221cb96df3bd9342e8c0232aba8&path:sdks/node
-        version: https://codeload.github.com/brodev3/ShardBrowser/tar.gz/cda916c6e5d93221cb96df3bd9342e8c0232aba8#path:sdks/node
+        specifier: git+https://github.com/brodev3/ShardBrowser.git#cddee94ac7d8e87d3cb1176319e40266e12d5858&path:sdks/node
+        version: https://codeload.github.com/brodev3/ShardBrowser/tar.gz/cddee94ac7d8e87d3cb1176319e40266e12d5858#path:sdks/node
       better-sqlite3:
         specifier: 13.0.3
         version: 13.0.3
@@ -305,8 +305,8 @@ packages:
   '@pinojs/redact@0.4.0':
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
 
-  '@proxyshard/shardx@https://codeload.github.com/brodev3/ShardBrowser/tar.gz/cda916c6e5d93221cb96df3bd9342e8c0232aba8#path:sdks/node':
-    resolution: {gitHosted: true, path: sdks/node, tarball: https://codeload.github.com/brodev3/ShardBrowser/tar.gz/cda916c6e5d93221cb96df3bd9342e8c0232aba8}
+  '@proxyshard/shardx@https://codeload.github.com/brodev3/ShardBrowser/tar.gz/cddee94ac7d8e87d3cb1176319e40266e12d5858#path:sdks/node':
+    resolution: {gitHosted: true, integrity: sha512-o3ZwtpcYw+UjLi9o75K0K0UXkhcjuG7yNMRTWySQfsT4Cgh+m9KhppxA5OZkBTawrq2tEgSmwqsVBTwLsLxyrA==, path: sdks/node, tarball: https://codeload.github.com/brodev3/ShardBrowser/tar.gz/cddee94ac7d8e87d3cb1176319e40266e12d5858}
     version: 2.0.3
     engines: {node: '>=18'}
 
@@ -1514,7 +1514,7 @@ snapshots:
 
   '@pinojs/redact@0.4.0': {}
 
-  '@proxyshard/shardx@https://codeload.github.com/brodev3/ShardBrowser/tar.gz/cda916c6e5d93221cb96df3bd9342e8c0232aba8#path:sdks/node':
+  '@proxyshard/shardx@https://codeload.github.com/brodev3/ShardBrowser/tar.gz/cddee94ac7d8e87d3cb1176319e40266e12d5858#path:sdks/node':
     dependencies:
       adm-zip: 0.6.1
       patchright: 1.63.0

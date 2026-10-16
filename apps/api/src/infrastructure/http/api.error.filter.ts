@@ -2,6 +2,7 @@ import { Catch, type ArgumentsHost, type ExceptionFilter } from "@nestjs/common"
 import type { ApiError, ApiErrorCode } from "@antidetect/contracts";
 import type { FastifyReply } from "fastify";
 import { ZodValidationException } from "nestjs-zod";
+import { FingerprintGenerationError } from "../../application/fingerprints/fingerprint.generator.js";
 import { ProfileNotFoundError } from "../../application/profiles/profile.errors.js";
 import {
   ActiveBrowserRunConflictError,
@@ -18,6 +19,7 @@ function createError(code: ApiErrorCode, message: string): ApiError {
 @Catch(
   ZodValidationException,
   ProfileNotFoundError,
+  FingerprintGenerationError,
   ActiveBrowserRunConflictError,
   BrowserRunStartingError,
   BrowserRuntimeLaunchFailedError,
@@ -29,6 +31,7 @@ export class ApiErrorFilter implements ExceptionFilter {
     exception:
       | ZodValidationException
       | ProfileNotFoundError
+      | FingerprintGenerationError
       | ActiveBrowserRunConflictError
       | BrowserRunStartingError
       | BrowserRuntimeLaunchFailedError
@@ -42,6 +45,27 @@ export class ApiErrorFilter implements ExceptionFilter {
       void reply
         .status(404)
         .send(createError("PROFILE_NOT_FOUND", "Profile was not found"));
+      return;
+    }
+
+    if (exception instanceof FingerprintGenerationError) {
+      if (exception.code === "RUNTIME_NOT_INSTALLED") {
+        void reply
+          .status(503)
+          .send(
+            createError(
+              "FINGERPRINT_RUNTIME_NOT_READY",
+              "Fingerprint runtime is not installed or is incomplete",
+            ),
+          );
+        return;
+      }
+
+      void reply
+        .status(500)
+        .send(
+          createError("FINGERPRINT_GENERATION_FAILED", "Fingerprint generation failed"),
+        );
       return;
     }
 

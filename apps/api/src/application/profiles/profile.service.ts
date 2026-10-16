@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { ProfileNotFoundError } from "./profile.errors.js";
 import type {
   Profile,
@@ -6,11 +5,6 @@ import type {
   ProfileListSortOrder,
   ProfileRepository,
 } from "./profile.repository.js";
-
-export interface CreateProfileInput {
-  readonly displayName: string;
-  readonly fingerprintEnabled: boolean;
-}
 
 export interface ListProfilesInput {
   readonly limit: number;
@@ -25,35 +19,8 @@ export interface ListProfilesResult {
   readonly nextOffset: number | null;
 }
 
-export interface ProfileServiceDependencies {
-  readonly createId: () => string;
-  readonly now: () => string;
-}
-
-const defaultDependencies: ProfileServiceDependencies = {
-  createId: randomUUID,
-  now: () => new Date().toISOString(),
-};
-
 export class ProfileService {
-  constructor(
-    private readonly repository: ProfileRepository,
-    private readonly dependencies: ProfileServiceDependencies = defaultDependencies,
-  ) {}
-
-  async create(input: CreateProfileInput): Promise<Profile> {
-    const id = this.dependencies.createId();
-    const timestamp = this.dependencies.now();
-
-    return this.repository.create({
-      id,
-      displayName: input.displayName,
-      fingerprintEnabled: input.fingerprintEnabled,
-      identityRef: input.fingerprintEnabled ? `test-identity:${id}` : null,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
-  }
+  constructor(private readonly repository: ProfileRepository) {}
 
   async getById(profileId: string): Promise<Profile> {
     const profile = await this.repository.findById(profileId);

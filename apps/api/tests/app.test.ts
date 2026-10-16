@@ -1,6 +1,6 @@
 import { healthResponseSchema } from "@antidetect/contracts";
 import { expect, test } from "vitest";
-import { buildApp } from "../src/app.ts";
+import { buildTestApp } from "./support/build.test.app.ts";
 import { createProfileRepositoryStub } from "./support/profile.repository.stub.ts";
 
 const requestHeaders = {
@@ -8,7 +8,7 @@ const requestHeaders = {
 };
 
 test("GET /health returns the API health status", async () => {
-  const app = await buildApp({
+  const app = await buildTestApp({
     profileRepository: createProfileRepositoryStub(),
   });
 
@@ -29,7 +29,7 @@ test("GET /health returns the API health status", async () => {
 });
 
 test("OpenAPI documents the health endpoint", async () => {
-  const app = await buildApp({
+  const app = await buildTestApp({
     profileRepository: createProfileRepositoryStub(),
   });
 

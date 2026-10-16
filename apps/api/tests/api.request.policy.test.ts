@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { buildApp } from "../src/app.ts";
+import { buildTestApp } from "./support/build.test.app.ts";
 import { createProfileRepositoryStub } from "./support/profile.repository.stub.ts";
 
 const validHost = "127.0.0.1:3000";
@@ -7,7 +7,7 @@ const validHost = "127.0.0.1:3000";
 async function request(
   headers: Record<string, string> = { host: validHost },
 ): Promise<{ statusCode: number; json: () => unknown }> {
-  const app = await buildApp({
+  const app = await buildTestApp({
     profileRepository: createProfileRepositoryStub(),
   });
 
@@ -44,7 +44,7 @@ test("allows the exact local same-origin request", async () => {
 });
 
 test("allows only explicitly configured UI origins", async () => {
-  const app = await buildApp({
+  const app = await buildTestApp({
     profileRepository: createProfileRepositoryStub(),
     config: {
       host: "127.0.0.1",
@@ -100,7 +100,7 @@ test("allows only explicitly configured UI origins", async () => {
           cookie: sessionCookie,
           "content-type": "application/json",
         },
-        payload: { displayName: "Vite profile" },
+        payload: { displayName: "Vite profile", fingerprintEnabled: false },
       });
 
     expect(allowedResponse.statusCode).toBe(200);
@@ -113,7 +113,7 @@ test("allows only explicitly configured UI origins", async () => {
 });
 
 test("requires an allowed Origin for state-changing requests", async () => {
-  const app = await buildApp({
+  const app = await buildTestApp({
     profileRepository: createProfileRepositoryStub(),
   });
 
@@ -162,7 +162,7 @@ test.each([
 });
 
 test("requires and issues a local session for non-public routes", async () => {
-  const app = await buildApp({
+  const app = await buildTestApp({
     profileRepository: createProfileRepositoryStub(),
   });
 

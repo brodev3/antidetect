@@ -9,10 +9,15 @@ import {
 } from "@antidetect/contracts";
 import { expect, test } from "vitest";
 import { buildApp } from "../src/app.ts";
+import {
+  FingerprintGenerationError,
+  type FingerprintGenerator,
+} from "../src/application/fingerprints/fingerprint.generator.ts";
 import { resolveAppPaths, type AppPaths } from "../src/config/app.paths.ts";
 import { ensureAppRootDirectories } from "../src/infrastructure/filesystem/app.directories.ts";
 import { createAppDatabase } from "../src/infrastructure/sqlite/app.database.ts";
 import { runMigrations } from "../src/infrastructure/sqlite/migrations/migration.runner.ts";
+import { SqliteFingerprintIdentityRepository } from "../src/infrastructure/sqlite/sqlite.fingerprint.identity.repository.ts";
 import { SqliteProfileRepository } from "../src/infrastructure/sqlite/sqlite.profile.repository.ts";
 import {
   acquireRootOwnership,
@@ -23,10 +28,19 @@ const requestHeaders = {
   host: "127.0.0.1:3000",
   origin: "http://127.0.0.1:3000",
 };
+const testFingerprintConfig = {
+  navigator: { platform: "Windows", languages: ["en-US"] },
+};
+const testFingerprintGenerator: FingerprintGenerator = {
+  async generate() {
+    return testFingerprintConfig;
+  },
+};
 
 interface ProfileAppFixture {
   readonly app: NestFastifyApplication;
   readonly repository: SqliteProfileRepository;
+  readonly identities: SqliteFingerprintIdentityRepository;
   readonly rootOwnership: RootOwnership;
   readonly requestHeaders: Record<string, string>;
 }
@@ -56,14 +70,18 @@ interface OpenApiDocument {
   readonly paths: Readonly<Record<string, OpenApiPath>>;
 }
 
-async function openProfileApp(paths: AppPaths): Promise<ProfileAppFixture> {
+async function openProfileApp(
+  paths: AppPaths,
+  fingerprintGenerator: FingerprintGenerator = testFingerprintGenerator,
+): Promise<ProfileAppFixture> {
   const rootOwnership = acquireRootOwnership(paths.databasePath);
 
   try {
     const database = createAppDatabase(rootOwnership);
     await runMigrations(database);
     const repository = new SqliteProfileRepository(database);
-    const app = await buildApp({ profileRepository: repository });
+    const identities = new SqliteFingerprintIdentityRepository(database);
+    const app = await buildApp({ profileRepository: repository, fingerprintGenerator });
     const sessionResponse = await app.getHttpAdapter().getInstance().inject({
       method: "GET",
       url: "/session",
@@ -83,6 +101,7 @@ async function openProfileApp(paths: AppPaths): Promise<ProfileAppFixture> {
     return {
       app,
       repository,
+      identities,
       rootOwnership,
       requestHeaders: { ...requestHeaders, cookie: sessionCookie },
     };
@@ -133,9 +152,12 @@ test("creates a profile and reads it after reopening the database", async () => 
     expect(createdProfile).toMatchObject({
       profileCode: "profile-001",
       displayName: "Research profile",
+      fingerprintPlatform: "Windows",
       fingerprintEnabled: true,
-      identityRef: `test-identity:${createdProfile.id}`,
     });
+    expect(createdProfile.identityRef).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
   } finally {
     await closeProfileApp(firstFixture);
   }
@@ -154,6 +176,12 @@ test("creates a profile and reads it after reopening the database", async () => 
 
     expect(getResponse.statusCode).toBe(200);
     expect(profileResponseSchema.parse(getResponse.json())).toEqual(createdProfile);
+    await expect(
+      secondFixture.identities.findById(createdProfile.identityRef!),
+    ).resolves.toMatchObject({
+      id: createdProfile.identityRef,
+      config: testFingerprintConfig,
+    });
   } finally {
     await closeProfileApp(secondFixture);
     await fs.rm(tempRoot, { recursive: true, force: true });
@@ -164,7 +192,14 @@ test("creates and persists a profile without a fingerprint", async () => {
   const { paths, tempRoot } = await createTestPaths(
     "antidetect-profile-no-fingerprint-api-",
   );
-  const firstFixture = await openProfileApp(paths);
+  let generationCalls = 0;
+  const fingerprintGenerator: FingerprintGenerator = {
+    async generate() {
+      generationCalls += 1;
+      throw new FingerprintGenerationError("RUNTIME_NOT_INSTALLED");
+    },
+  };
+  const firstFixture = await openProfileApp(paths, fingerprintGenerator);
   let createdProfile: ReturnType<typeof profileResponseSchema.parse>;
 
   try {
@@ -175,15 +210,21 @@ test("creates and persists a profile without a fingerprint", async () => {
         method: "POST",
         url: "/profiles",
         headers: firstFixture.requestHeaders,
-        payload: { displayName: "Direct profile", fingerprintEnabled: false },
+        payload: {
+          displayName: "Direct profile",
+          fingerprintEnabled: false,
+          fingerprintPlatform: "macOS",
+        },
       });
 
     expect(response.statusCode, response.body).toBe(201);
     createdProfile = profileResponseSchema.parse(response.json());
     expect(createdProfile).toMatchObject({
       fingerprintEnabled: false,
+      fingerprintPlatform: "macOS",
       identityRef: null,
     });
+    expect(generationCalls).toBe(0);
   } finally {
     await closeProfileApp(firstFixture);
   }
@@ -207,6 +248,66 @@ test("creates and persists a profile without a fingerprint", async () => {
   }
 });
 
+test.each([
+  {
+    generationCode: "RUNTIME_NOT_INSTALLED",
+    statusCode: 503,
+    apiCode: "FINGERPRINT_RUNTIME_NOT_READY",
+  },
+  {
+    generationCode: "FINGERPRINT_GENERATION_FAILED",
+    statusCode: 500,
+    apiCode: "FINGERPRINT_GENERATION_FAILED",
+  },
+] as const)(
+  "maps $generationCode to a safe API error without persisting a profile",
+  async ({ generationCode, statusCode, apiCode }) => {
+    const { paths, tempRoot } = await createTestPaths(
+      "antidetect-profile-generation-api-",
+    );
+    const fingerprintGenerator: FingerprintGenerator = {
+      async generate() {
+        throw new FingerprintGenerationError(generationCode);
+      },
+    };
+    const fixture = await openProfileApp(paths, fingerprintGenerator);
+
+    try {
+      const response = await fixture.app
+        .getHttpAdapter()
+        .getInstance()
+        .inject({
+          method: "POST",
+          url: "/profiles",
+          headers: fixture.requestHeaders,
+          payload: { displayName: "Runtime unavailable" },
+        });
+
+      expect(response.statusCode).toBe(statusCode);
+      expect(apiErrorSchema.parse(response.json())).toEqual({
+        error: {
+          code: apiCode,
+          message:
+            generationCode === "RUNTIME_NOT_INSTALLED"
+              ? "Fingerprint runtime is not installed or is incomplete"
+              : "Fingerprint generation failed",
+        },
+      });
+      await expect(
+        fixture.repository.list({
+          limit: 10,
+          offset: 0,
+          sortBy: "createdAt",
+          sortOrder: "asc",
+        }),
+      ).resolves.toEqual([]);
+    } finally {
+      await closeProfileApp(fixture);
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  },
+);
+
 test("returns a bounded and stably ordered profile list", async () => {
   const { paths, tempRoot } = await createTestPaths("antidetect-profile-list-api-");
   const fixture = await openProfileApp(paths);
@@ -215,6 +316,7 @@ test("returns a bounded and stably ordered profile list", async () => {
     {
       id: "00000000-0000-4000-8000-000000000003",
       displayName: "Third",
+      fingerprintPlatform: "Windows",
       fingerprintEnabled: true,
       identityRef: "test-identity:00000000-0000-4000-8000-000000000003",
       createdAt: "2026-09-21T02:00:00.000Z",
@@ -223,6 +325,7 @@ test("returns a bounded and stably ordered profile list", async () => {
     {
       id: "00000000-0000-4000-8000-000000000002",
       displayName: "Second",
+      fingerprintPlatform: "Windows",
       fingerprintEnabled: true,
       identityRef: "test-identity:00000000-0000-4000-8000-000000000002",
       createdAt: firstTimestamp,
@@ -231,6 +334,7 @@ test("returns a bounded and stably ordered profile list", async () => {
     {
       id: "00000000-0000-4000-8000-000000000001",
       displayName: "First",
+      fingerprintPlatform: "Windows",
       fingerprintEnabled: true,
       identityRef: "test-identity:00000000-0000-4000-8000-000000000001",
       createdAt: firstTimestamp,
@@ -403,6 +507,8 @@ test("documents profile routes and explicit pagination limits", async () => {
     expect(response.statusCode).toBe(200);
     expect(profilesPath?.post?.responses["201"]).toBeDefined();
     expect(profilesPath?.post?.responses["400"]).toBeDefined();
+    expect(profilesPath?.post?.responses["500"]).toBeDefined();
+    expect(profilesPath?.post?.responses["503"]).toBeDefined();
     expect(profilesPath?.get?.responses["200"]).toBeDefined();
     expect(profilesPath?.get?.responses["400"]).toBeDefined();
     expect(profilePath?.get?.responses["200"]).toBeDefined();

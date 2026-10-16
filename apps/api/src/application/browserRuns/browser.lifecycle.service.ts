@@ -1,4 +1,13 @@
 import { randomUUID } from "node:crypto";
+import {
+  FingerprintGenerationError,
+  type FingerprintPlatform,
+  type FingerprintGenerator,
+} from "../fingerprints/fingerprint.generator.js";
+import {
+  FINGERPRINT_FORMAT_VERSION,
+  type FingerprintIdentity,
+} from "../fingerprints/fingerprint.identity.repository.js";
 import { ProfileNotFoundError } from "../profiles/profile.errors.js";
 import type { Profile, ProfileRepository } from "../profiles/profile.repository.js";
 import { ProfileOperationMutex } from "../lifecycle/profile.operation.mutex.js";
@@ -29,7 +38,8 @@ export interface BrowserLifecycleServiceOptions {
   readonly profileDirectoryFor: (profileId: string) => string;
   readonly now?: () => string;
   readonly createRunId?: () => string;
-  readonly createFingerprintIdentityRef?: () => string;
+  readonly createFingerprintIdentityId?: () => string;
+  readonly fingerprintGenerator?: FingerprintGenerator;
   readonly launchTimeoutMs?: number;
   readonly recoveryTimeoutMs?: number;
   readonly stopTimeoutMs?: number;
@@ -123,7 +133,7 @@ async function settleWithin<T>(
 export class BrowserLifecycleService {
   private readonly now: () => string;
   private readonly createRunId: () => string;
-  private readonly createFingerprintIdentityRef: () => string;
+  private readonly createFingerprintIdentityId: () => string;
   private readonly launchTimeoutMs: number;
   private readonly recoveryTimeoutMs: number;
   private readonly stopTimeoutMs: number;
@@ -147,8 +157,8 @@ export class BrowserLifecycleService {
   ) {
     this.now = options.now ?? (() => new Date().toISOString());
     this.createRunId = options.createRunId ?? randomUUID;
-    this.createFingerprintIdentityRef =
-      options.createFingerprintIdentityRef ?? (() => `test-identity:${randomUUID()}`);
+    this.createFingerprintIdentityId =
+      options.createFingerprintIdentityId ?? randomUUID;
     this.launchTimeoutMs = options.launchTimeoutMs ?? defaultLaunchTimeoutMs;
     this.recoveryTimeoutMs = options.recoveryTimeoutMs ?? defaultRecoveryTimeoutMs;
     this.stopTimeoutMs = options.stopTimeoutMs ?? defaultStopTimeoutMs;
@@ -200,14 +210,105 @@ export class BrowserLifecycleService {
         throw new ActiveBrowserRunConflictError(profileId, activeRun.id);
       }
 
-      const identityRef = fingerprintEnabled
-        ? (profile.identityRef ?? this.createFingerprintIdentityRef())
-        : profile.identityRef;
+      if (fingerprintEnabled && profile.identityRef === null) {
+        const identity = await this.createFingerprintIdentity(
+          profile.fingerprintPlatform,
+        );
+        const enabledProfile = await this.profiles.enableFingerprintWithIdentity(
+          profileId,
+          identity,
+          identity.createdAt,
+        );
+        if (enabledProfile === null) throw new ProfileNotFoundError(profileId);
+        return enabledProfile;
+      }
+
       const updatedProfile = await this.profiles.updateFingerprintSettings(profileId, {
         fingerprintEnabled,
-        identityRef,
+        identityRef: profile.identityRef,
         updatedAt: this.now(),
       });
+      if (updatedProfile === null) {
+        throw new ProfileNotFoundError(profileId);
+      }
+
+      return updatedProfile;
+    });
+  }
+
+  async replaceFingerprintIdentity(profileId: string): Promise<Profile> {
+    this.assertAcceptingCommands();
+    return this.mutex.runExclusive(profileId, async () => {
+      this.assertAcceptingCommands();
+      const profile = await this.profiles.findById(profileId);
+      if (profile === null) {
+        throw new ProfileNotFoundError(profileId);
+      }
+
+      const activeRun = await this.runs.findActiveByProfileId(profileId);
+      if (activeRun !== null) {
+        throw new ActiveBrowserRunConflictError(profileId, activeRun.id);
+      }
+      const identity = await this.createFingerprintIdentity(
+        profile.fingerprintPlatform,
+      );
+      const updatedProfile = await this.profiles.replaceFingerprintIdentity(
+        profileId,
+        identity,
+        identity.createdAt,
+      );
+      if (updatedProfile === null) {
+        throw new ProfileNotFoundError(profileId);
+      }
+
+      return updatedProfile;
+    });
+  }
+
+  async updateFingerprintPlatform(
+    profileId: string,
+    fingerprintPlatform: FingerprintPlatform,
+  ): Promise<Profile> {
+    this.assertAcceptingCommands();
+    return this.mutex.runExclusive(profileId, async () => {
+      this.assertAcceptingCommands();
+      const profile = await this.profiles.findById(profileId);
+      if (profile === null) {
+        throw new ProfileNotFoundError(profileId);
+      }
+      if (profile.fingerprintPlatform === fingerprintPlatform) {
+        return profile;
+      }
+
+      const activeRun = await this.runs.findActiveByProfileId(profileId);
+      if (activeRun !== null) {
+        throw new ActiveBrowserRunConflictError(profileId, activeRun.id);
+      }
+
+      if (!profile.fingerprintEnabled) {
+        const timestamp = this.now();
+        const updatedProfile = await this.profiles.updateFingerprintSettings(
+          profileId,
+          {
+            fingerprintEnabled: false,
+            identityRef: null,
+            fingerprintPlatform,
+            updatedAt: timestamp,
+          },
+        );
+        if (updatedProfile === null) {
+          throw new ProfileNotFoundError(profileId);
+        }
+        return updatedProfile;
+      }
+
+      const identity = await this.createFingerprintIdentity(fingerprintPlatform);
+      const updatedProfile = await this.profiles.replaceFingerprintIdentity(
+        profileId,
+        identity,
+        identity.createdAt,
+        fingerprintPlatform,
+      );
       if (updatedProfile === null) {
         throw new ProfileNotFoundError(profileId);
       }
@@ -785,6 +886,24 @@ export class BrowserLifecycleService {
       updatedAt: timestamp,
       endedAt: isBrowserRunTerminal(nextStatus) ? (run.endedAt ?? timestamp) : null,
     });
+  }
+
+  private async createFingerprintIdentity(
+    platform: FingerprintPlatform,
+  ): Promise<FingerprintIdentity> {
+    const generator = this.options.fingerprintGenerator;
+    if (generator === undefined) {
+      throw new FingerprintGenerationError("RUNTIME_NOT_INSTALLED");
+    }
+
+    const id = this.createFingerprintIdentityId();
+    const config = await generator.generate(id, platform);
+    return {
+      id,
+      formatVersion: FINGERPRINT_FORMAT_VERSION,
+      config,
+      createdAt: this.now(),
+    };
   }
 
   private assertAcceptingCommands(): void {
